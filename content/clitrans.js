@@ -128,11 +128,14 @@ function createCLITrans(env) {
     throw new Error("Gemini 没有返回内容" + (why ? "（" + why + "）" : ""));
   }
   let geminiActive = 0;
-  async function callGeminiAPI(system, user) {
+  async function callGeminiAPI(system, user, images) {
     const key = (pref("geminiApiKey") || "").trim();
     const url = "https://generativelanguage.googleapis.com/v1beta/models/" +
       encodeURIComponent(geminiModel()) + ":generateContent";
-    const body = { contents: [{ role: "user", parts: [{ text: user }] }], generationConfig: { temperature: 0.2 } };
+    const parts = [];
+    for (const img of images || []) parts.push({ inlineData: { mimeType: "image/png", data: await fileBase64(img) } });
+    parts.push({ text: user });
+    const body = { contents: [{ role: "user", parts }], generationConfig: { temperature: 0.2 } };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
     while (geminiActive >= 4) await sleep(50);
     geminiActive++;
@@ -192,12 +195,22 @@ function createCLITrans(env) {
     a.push("--print-timeout", t + "s");
     return a;
   }
-  async function callAgy(system, user) {
+  async function callAgy(system, user, images) {
     const bin = resolveTool("agy");
     if (!bin) throw new Error("找不到 Antigravity CLI（agy）");
     return withCliSlot(async () => {
-      const prompt = (system ? system + "\n\n----- INPUT -----\n" : "") + user;
-      const r = await runProcess(bin, buildAgyArgs(prompt), {
+      let pics = "";
+      const dirs = new Set();
+      if (images && images.length) {
+        // agy's print mode takes no inline images: its agent opens the PNG files itself
+        pics = "\n\nThe images, in order (open EVERY one with your file viewing tool before answering; " +
+          "do not guess from the extracted text):\n" + images.map((p, i) => "[" + (i + 1) + "] " + p).join("\n");
+        for (const p of images) dirs.add(String(p).replace(/\/[^/]*$/, ""));
+      }
+      const prompt = (system ? system + pics + "\n\n----- INPUT -----\n" : pics) + user;
+      const args = buildAgyArgs(prompt);
+      for (const d of dirs) args.push("--add-dir", d);
+      const r = await runProcess(bin, args, {
         workdir: tmpDir(), timeoutMs: ((Number(pref("cliTimeoutSec")) || 180) + 15) * 1000,
       });
       const out = String(r.stdout || "").trim();
@@ -212,11 +225,20 @@ function createCLITrans(env) {
     if (resolveTool("gemini")) return "cli";
     return null;
   }
-  function callGemini(system, user) {
+  function callGemini(system, user, images) {
     const ch = geminiChannel();
-    if (ch === "api") return callGeminiAPI(system, user);
-    if (ch === "agy") return callAgy(system, user);
+    if (ch === "api") return callGeminiAPI(system, user, images);
+    if (ch === "agy") return callAgy(system, user, images);
+    if (images && images.length) throw new Error("Gemini CLI 渠道不支持看图，请改用 Antigravity（agy）或 API Key");
     return callGeminiCLI(system, user);
+  }
+  /** PNG bytes → base64 (for Claude / Gemini image input). */
+  async function fileBase64(path) {
+    const bytes = await IOUtils.read(path);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const b64 = typeof btoa === "function" ? btoa : Zotero.getMainWindow().btoa.bind(Zotero.getMainWindow());
+    return b64(bin);
   }
 
   // --------------------------------------------------------- subprocess
@@ -420,6 +442,43 @@ function createCLITrans(env) {
       if (r.exitCode !== 0) throw new Error("Claude Code 调用失败：" + errText(r));
       return r.stdout.trim();
     });
+  }
+
+  async function callClaudeVision(system, user, images) {
+    const claude = resolveTool("claude");
+    if (!claude) throw new Error("找不到 Claude Code CLI，请在设置中填写路径");
+    const content = [];
+    for (const img of images) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: await fileBase64(img) } });
+    content.push({ type: "text", text: user });
+    const stdin = JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n";
+    return withCliSlot(async () => {
+      const r = await runWithFlagFallback(
+        claude, (d) => {
+          const a = buildClaudeArgs(system, d);
+          a.splice(a.indexOf("--output-format"), 2, "--input-format", "stream-json", "--output-format", "stream-json", "--verbose");
+          return a;
+        },
+        ["--tools", "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "--disable-slash-commands"],
+        { stdin, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000 },
+      );
+      let res = null;
+      for (const line of String(r.stdout || "").split("\n")) {
+        try { const d = JSON.parse(line); if (d && d.type === "result") res = d; } catch (e) {}
+      }
+      if (!res || res.is_error || !res.result) throw new Error("Claude Code 看图调用失败：" + ((res && res.result) || errText(r)));
+      return String(res.result).trim();
+    });
+  }
+  /** Engines that can read a picture (formulas, figures). */
+  function visionCapable(engine) {
+    if (engine === "codex" || engine === "claude") return true;
+    if (engine === "gemini") { const ch = geminiChannel(); return ch === "api" || ch === "agy"; }
+    return false;
+  }
+  function callVision(engine, system, user, images) {
+    if (engine === "claude") return callClaudeVision(system, user, images);
+    if (engine === "gemini") return callGemini(system, user, images);
+    return callCodex(system, user, images);
   }
 
   const ENGINES = {
@@ -634,7 +693,7 @@ function createCLITrans(env) {
     if (!BATCH_LIMITS[engine]) throw new Error("未知引擎：" + engine);
     return enqueueBatch(engine, text);
   }
-  // ------------------------- vision: paragraph images → translation with LaTeX formulas (GPT only)
+  // ------------------------- vision: paragraph images → translation with LaTeX formulas (GPT / Claude / Gemini)
   // Rebuilding fractions and scripts from PDF glyph positions is guesswork; a multimodal model reads
   // the formula from the picture of the paragraph and writes it as LaTeX, which interleave.py typesets.
   function visionPrompt(langName, glossary) {
@@ -647,6 +706,7 @@ function createCLITrans(env) {
       "A displayed equation on its own line goes inside $$...$$.\n" +
       "- Use only standard math LaTeX (\\frac, ^, _, \\left( \\right), Greek letters, \\max, \\arg\\max, \\overset, \\mathbb, \\mathrm). No \\begin environments.\n" +
       "- Keep citations, numbers and labels such as (i), (ii), Lemma 2 unchanged. Translate only what is in the image.\n" +
+      "- Plain text only: no Markdown (no *, **, #, bullet lists), no notes or explanations.\n" +
       "- Output format, nothing else: for each paragraph a line \"@@@ N\" (N = its label number) followed by its translation.";
     if (glossary && glossary.length) {
       p += "\nUse this glossary strictly (source → target):\n" + glossary.map(([a, b]) => "- " + a + " → " + b).join("\n");
@@ -675,30 +735,34 @@ function createCLITrans(env) {
     }
     return out;
   }
-  const visionQueue = { items: [], timer: null };
-  function enqueueVision(image, text) {
+  const visionQueues = {};  // engine -> { items, timer }
+  function enqueueVision(image, text, engine) {
+    engine = engine || "codex";
+    const q = visionQueues[engine] || (visionQueues[engine] = { items: [], timer: null });
     return new Promise((resolve, reject) => {
-      visionQueue.items.push({ image, text, resolve, reject });
-      if (visionQueue.items.length >= 4) flushVision();
-      else if (!visionQueue.timer) visionQueue.timer = env.setTimeout(flushVision, 800);
+      q.items.push({ image, text, resolve, reject });
+      if (q.items.length >= 4) flushVision(engine);
+      else if (!q.timer) q.timer = env.setTimeout(() => flushVision(engine), 800);
     });
   }
-  function flushVision() {
-    if (visionQueue.timer) { env.clearTimeout(visionQueue.timer); visionQueue.timer = null; }
-    const items = visionQueue.items.splice(0);
-    if (items.length) runVisionBatch(items).catch((e) => LOG("vision batch error", e));
+  function flushVision(engine) {
+    const q = visionQueues[engine];
+    if (!q) return;
+    if (q.timer) { env.clearTimeout(q.timer); q.timer = null; }
+    const items = q.items.splice(0);
+    if (items.length) runVisionBatch(items, 0, engine).catch((e) => LOG("vision batch error", e));
   }
-  async function runVisionBatch(items, depth = 0) {
+  async function runVisionBatch(items, depth = 0, engine = "codex") {
     const all = items.map((i) => i.text).join("\n");
     const sys = visionPrompt(pref("targetLangName") || "简体中文", glossaryForText(parseGlossary(pref("glossary")), all));
     const user = items.map((it, i) => "[" + (i + 1) + "] (text extracted from the PDF, formulas may be garbled — trust the image): " +
       String(it.text || "").slice(0, 3000)).join("\n\n");
     let result;
     try {
-      result = parseVisionResult(await callCodex(sys, user, items.map((i) => i.image)));
+      result = parseVisionResult(await callVision(engine, sys, user, items.map((i) => i.image)));
     } catch (e) {
       if (items.length > 1 && depth < 1) {
-        await Promise.all(items.map((it) => runVisionBatch([it], depth + 1)));
+        await Promise.all(items.map((it) => runVisionBatch([it], depth + 1, engine)));
         return;
       }
       items.forEach((it) => it.reject(e));
@@ -710,7 +774,7 @@ function createCLITrans(env) {
       if (v) it.resolve(v);
       else missing.push(it);
     });
-    if (missing.length && depth < 1) await Promise.all(missing.map((it) => runVisionBatch([it], depth + 1)));
+    if (missing.length && depth < 1) await Promise.all(missing.map((it) => runVisionBatch([it], depth + 1, engine)));
     else missing.forEach((it) => it.reject(new Error("模型没有返回这一段")));
   }
 
@@ -1327,18 +1391,18 @@ function createCLITrans(env) {
     if (!body || typeof body.text !== "string") return [400, "application/json", JSON.stringify({ error: "text required" })];
     try {
       if (body.mode === "figure") {
-        if ((body.engine || "") !== "codex") throw new Error("看图翻译只支持 GPT（Codex）");
+        if (!visionCapable(body.engine || "")) throw new Error("该引擎不支持看图翻译");
         if (typeof body.image !== "string" || !/\.png$/i.test(body.image) || !fileExists(body.image)) throw new Error("image not found");
         const gl = glossaryForText(parseGlossary(pref("glossary")), body.text);
-        const out = await callCodex(figurePrompt(pref("targetLangName") || "简体中文", gl),
+        const out = await callVision(body.engine, figurePrompt(pref("targetLangName") || "简体中文", gl),
           "Text extracted from the PDF (symbols may be garbled — trust the image): " + String(body.text || "").slice(0, 2500),
           [body.image]);
         return [200, "application/json", JSON.stringify({ translation: out })];
       }
       if (body.mode === "vision") {
-        if ((body.engine || "") !== "codex") throw new Error("看图翻译只支持 GPT（Codex）");
+        if (!visionCapable(body.engine || "")) throw new Error("该引擎不支持看图翻译");
         if (typeof body.image !== "string" || !/\.png$/i.test(body.image) || !fileExists(body.image)) throw new Error("image not found");
-        return [200, "application/json", JSON.stringify({ translation: await enqueueVision(body.image, body.text) })];
+        return [200, "application/json", JSON.stringify({ translation: await enqueueVision(body.image, body.text, body.engine) })];
       }
       const translation = await translateSegment(body.text, body.engine || "google", body.mode);
       return [200, "application/json", JSON.stringify({ translation })];
@@ -1477,7 +1541,7 @@ function createCLITrans(env) {
     "Compose layout": "生成双语排版",
     "Analyze layout": "识别版面",
     "OCR figures": "识别图中文字",
-    "Read formulas": "GPT 看图识别公式",
+    "Read formulas": "看图识别公式",
     "Prepare OCR": "准备文字识别（仅首次，约 30 秒）",
   };
   function friendlyError(msg) {
@@ -1618,7 +1682,7 @@ function createCLITrans(env) {
         env: {
           CLITRANS_TRANSLATE_URL: bridgeBaseURL() + "/translate", CLITRANS_TOKEN: pref("bridgeToken"),
           CLITRANS_ENGINE: engine,
-          CLITRANS_VISION: engine === "codex" && pref("visionFormulas") !== false ? "1" : "",
+          CLITRANS_VISION: visionCapable(engine) && pref("visionFormulas") !== false ? "1" : "",
           CLITRANS_CACHE_KEY: [engine, model, pref("glossary") || "", pref("targetLang") || "zh-CN", "i1",
             pref("skipReferences") !== false ? 1 : 0].join(":"),
         },

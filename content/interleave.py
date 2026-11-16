@@ -377,6 +377,8 @@ def linearize(tokens, em, depth=0, frac_flag=None):
     return re.sub(r"\s*(=|≤|≥|≠|≈|∈|∉|⊂|⊆|≡|→|&lt;|&gt;)\s*", r" \1 ", out)
 
 
+VISION_ENGINES = ("codex", "claude", "gemini")
+VISION_NAME = {"codex": "GPT", "claude": "Claude", "gemini": "Gemini"}  # the plugin sets CLITRANS_VISION only when the channel can see
 TEXT_FONTS = set()  # fonts that carry the running text of this document: never "math" by name
 BROKEN_FONTS = set()  # math fonts whose text layer lies ("(" extracted as "b", ")" as "#"): use the picture
 BAD_TOKS = set()  # (x0, y0) of glyphs from BROKEN_FONTS (tokens get copied, so not by id)
@@ -1187,8 +1189,20 @@ def mathtext_ok():
     return _MT["ok"]
 
 
+TEX_ALIASES = {  # LaTeX that models write but matplotlib's mathtext does not know (Gemini: \ge, \le)
+    "ge": "\\geq", "le": "\\leq", "gets": "\\leftarrow", "land": "\\wedge", "lor": "\\vee",
+    "iff": "\\Leftrightarrow", "implies": "\\Rightarrow", "lvert": "|", "rvert": "|", "lVert": "\\Vert", "rVert": "\\Vert",
+    "!": "", "tfrac": "\\frac", "dfrac": "\\frac", "displaystyle": "",
+}
+
+
+def tex_normalize(tex):
+    return re.sub(r"\\(!|[a-zA-Z]+)", lambda m: TEX_ALIASES.get(m.group(1), m.group(0)), tex)
+
+
 def tex_variants(tex):
-    yield tex
+    yield tex_normalize(tex)
+    tex = tex_normalize(tex)
     t = re.sub(r"\\[dt]frac", r"\\frac", tex)
     t = re.sub(r"\\(?:left|right|bigl|bigr|Bigl|Bigr|big|Big|biggl|biggr)\s*([.]?)", lambda m: "" if m.group(1) == "." else "", t)
     t = re.sub(r"\\(?:text|textrm|textit|operatorname)\s*\{([^{}]*)\}", r"\\mathrm{\1}", t)
@@ -1301,14 +1315,19 @@ def with_line_height(markup, heights, font_size):
     return markup
 
 
+def strip_md(t):
+    """Markdown emphasis some models add (Claude: *term*, **term**) — outside formulas only."""
+    return re.sub(r"(?<![A-Za-z0-9*^_])\*{1,2}([^*\s$][^*\n$]{0,79}?)(?<!\s)\*{1,2}(?![A-Za-z0-9*])", r"\1", t)
+
+
 def vision_html(tr, chunks, font_size):
     """Translation with $…$ / $$…$$ LaTeX: text escaped, every formula typeset as an image."""
-    tr = re.sub(r"\*\*([^*]+)\*\*", r"\1", str(tr)).strip()
+    tr = str(tr).strip()
     out = []
     tall = []
     pos = 0
     for m in re.finditer(r"\$\$(.+?)\$\$|\\\[(.+?)\\\]|\$([^$]+?)\$|\\\((.+?)\\\)", tr, re.S):
-        out.append(html.escape(tr[pos:m.start()]).replace("\n", "<br/>"))
+        out.append(html.escape(strip_md(tr[pos:m.start()])).replace("\n", "<br/>"))
         pos = m.end()
         display = m.group(1) is not None or m.group(2) is not None
         tex = next(g for g in m.groups() if g is not None)
@@ -1323,11 +1342,12 @@ def vision_html(tr, chunks, font_size):
         else:
             tall.append(h)
             out.append(img)
-    out.append(html.escape(tr[pos:]).replace("\n", "<br/>"))
+    out.append(html.escape(strip_md(tr[pos:])).replace("\n", "<br/>"))
     return with_line_height("<p>" + "".join(out) + "</p>", tall, font_size)
 
 
 def translation_html(tr, ph_items, src, chunks, font_size, body_size):
+    tr = strip_md(str(tr))
     known = {i: it for i, it in enumerate(ph_items, 1)}
 
     def glyph(pno, m, masks=()):
@@ -1425,7 +1445,7 @@ def compose_pages(layout, src, pages, units, vinfo, results, body, out_path, tr)
             lst = ""
             if items:
                 lst = "<div style='font-size:%.2fpt'><p style='color:#888;font-size:6.5pt;margin:0'>图中文字%s</p>%s</div>" % (
-                    size, "（GPT 看图）" if info.get("figkey") else "（文字识别）" if info.get("ocr") else "",
+                    size, "（%s 看图）" % VISION_NAME.get(os.environ.get("CLITRANS_ENGINE", ""), "模型") if info.get("figkey") else "（文字识别）" if info.get("ocr") else "",
                     figure_list_html(items, chunks, size))
             return "<div style='margin:2pt 0 5pt 0'>%s%s</div>" % (slot_html(png, w_, h_, panel_w(reg.pno)), lst)
         return ""
@@ -1692,15 +1712,15 @@ def main(argv):
     # 4. translate ----------------------------------------------------------------------------
     jobs = []
     tr = Translator()
-    vision = bool(os.environ.get("CLITRANS_VISION")) and tr.engine == "codex" and mathtext_ok()
-    if os.environ.get("CLITRANS_VISION") and tr.engine == "codex" and not mathtext_ok():
+    vision = bool(os.environ.get("CLITRANS_VISION")) and tr.engine in VISION_ENGINES and mathtext_ok()
+    if os.environ.get("CLITRANS_VISION") and tr.engine in VISION_ENGINES and not mathtext_ok():
         emit({"warn": "matplotlib 未安装，复杂公式改用截图方式"})
     vdir = os.path.join(os.path.dirname(os.path.abspath(out_path)), "vision")
     vision_jobs = []
     for u in units:
         if u["kind"] != "text" or u.get("skip") or is_metadata(u["text"]) or not worth_translating(re.sub(r"\{v\d+\}", "", u["text"])):
             continue
-        # paragraphs with stacked formulas (fractions, multi-line) are read from their picture by GPT
+        # paragraphs with stacked formulas (fractions, multi-line) are read from their picture by the model (GPT / Claude / Gemini)
         if vision and any(it[2] is None for it in u["ph"].items):
             os.makedirs(vdir, exist_ok=True)
             tparts = [p_ for p_ in u["parts"] if p_.label in TEXT_LABELS]
@@ -1724,7 +1744,7 @@ def main(argv):
     for rid, info in vinfo.items():
         reg = next((r for r in visual_regs if id(r) == rid), None)
         if vision and reg is not None and reg.label == "figure" and info.get("labels"):
-            # GPT reads the figure itself: correct symbols (α, Γ*), titles, legends; ticks skipped
+            # the model reads the figure itself: correct symbols (α, Γ*), titles, legends; ticks skipped
             os.makedirs(vdir, exist_ok=True)
             path = os.path.join(vdir, "fig-%d.png" % len(fig_jobs))
             src[reg.pno].get_pixmap(dpi=220, clip=reg.rect, alpha=False).save(path)
@@ -1910,7 +1930,7 @@ def main(argv):
                 flow.ops[pi].append(("chunk", idx, R(x - 7.5, y - 3.5, x - 7.5 + 14, y - 3.5 + filled.y1), R(0, 0, 14, filled.y1)))
         size = max(6.5, fs * 0.82)
         note = "<p style='color:#888;font-size:6.5pt;margin:0 0 1.5pt 0'>图中文字%s</p>%s" % (
-            "（GPT 看图）" if info.get("figkey") else "（文字识别）" if info.get("ocr") else "", figure_list_html(items, chunks, size))
+            "（%s 看图）" % VISION_NAME.get(os.environ.get("CLITRANS_ENGINE", ""), "模型") if info.get("figkey") else "（文字识别）" if info.get("ocr") else "", figure_list_html(items, chunks, size))
         css = "body{font-size:%.2fpt;line-height:1.35}" % size
         add_gap(GAP_TR, wide)
         place_story(lambda n=note, c=css: chunks.story(n, c), wide)
@@ -1974,7 +1994,10 @@ def main(argv):
 
     def glyph_boxes(pno):
         if pno not in _gb:
-            _gb[pno] = [R(c["bbox"]) for b in src[pno].get_text("rawdict")["blocks"] for l in b.get("lines", [])
+            # (box, is_delimiter): math-extension brackets (CMEX, Advent "…mex") report a box shifted
+            # away from where they are drawn, so they are kept whenever they touch the clip at all
+            _gb[pno] = [(R(c["bbox"]), c["c"] in "()[]{}|‖⟨⟩⌈⌉⌊⌋√∑∏∫" or bool(re.search(r"cmex|mex\b|mex\d|extension", s_["font"] or "", re.I)))
+                        for b in src[pno].get_text("rawdict")["blocks"] for l in b.get("lines", [])
                         for s_ in l["spans"] for c in s_["chars"] if c["c"].strip()]
         return _gb[pno]
 
@@ -1985,11 +2008,13 @@ def main(argv):
         # keep every glyph that reaches into the clip whole (tall brackets, roots): only text that lies
         # entirely outside the protected box is removed
         c = R(clip) + (-0.3, -0.3, 0.3, 0.3)
-        for ch in glyph_boxes(pno):
+        for ch, delim in glyph_boxes(pno):
             cy = (ch.y0 + ch.y1) / 2
-            inside = clip.y0 <= cy <= clip.y1 and clip.x0 <= (ch.x0 + ch.x1) / 2 <= clip.x1
+            cx_in = clip.x0 <= (ch.x0 + ch.x1) / 2 <= clip.x1
+            inside = clip.y0 <= cy <= clip.y1 and cx_in
             tall = ch.height > 1.6 * body and (ch & clip).get_area() > 0.3 * ch.get_area()
-            if inside or tall:
+            bracket = delim and cx_in and (ch & clip).get_area() > 0.15 * ch.get_area()
+            if inside or tall or bracket:
                 c |= ch
         for band in (R(r.x0, r.y0, r.x1, c.y0), R(r.x0, c.y1, r.x1, r.y1), R(r.x0, c.y0, c.x0, c.y1), R(c.x1, c.y0, r.x1, c.y1)):
             if not (band & r).is_empty:
