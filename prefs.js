@@ -29,3 +29,5 @@ pref("extensions.zotero.clitrans.translateTables", true);
 pref("extensions.zotero.clitrans.visionFormulas", true);
 pref("extensions.zotero.clitrans.paraModifier", "alt");
 pref("extensions.zotero.clitrans.paraEngine", "");
+pref("extensions.zotero.clitrans.useMirror", true);
+pref("extensions.zotero.clitrans.pythonPath", "");

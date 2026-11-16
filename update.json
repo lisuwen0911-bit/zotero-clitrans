@@ -61,6 +61,16 @@
               "strict_min_version": "6.999"
             }
           }
+        },
+        {
+          "version": "0.6.0",
+          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.6.0.xpi",
+          "update_hash": "sha256:8c543c7f520db01ecb5225beca289081b415d75a2bc1d4344461cb9a2a4f6fb6",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999"
+            }
+          }
         }
       ]
     }
