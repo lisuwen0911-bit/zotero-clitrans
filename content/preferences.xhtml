@@ -10,6 +10,17 @@
   </html:style>
 
   <groupbox>
+    <label><html:h2>快速开始（Windows / macOS 通用）</html:h2></label>
+    <html:div class="hint" style="margin-left:0">划词翻译和 Google 免费引擎装好插件就能用。整篇翻译（保留排版的双语 PDF）需要一个本地运行环境：点下面的「一键配置翻译环境」，插件会自动安装 uv、pdf2zh_next（BabelDOC）、公式排版与文字识别组件，并下载中文字体和版面识别模型，只需一次，约 5–15 分钟（视网速）。GPT / Claude / Gemini 引擎用你本机已登录的命令行工具，没有的话「检测环境」会给出安装命令。</html:div>
+    <html:div class="row">
+      <button id="clitrans-env-check" label="检测环境"/>
+      <button id="clitrans-env-setup" label="一键配置翻译环境"/>
+      <checkbox label="使用国内镜像下载（清华 PyPI 等，国内网络推荐）" preference="extensions.zotero.clitrans.useMirror"/>
+    </html:div>
+    <html:pre id="clitrans-env-out">点「检测环境」查看本机已具备哪些组件。</html:pre>
+  </groupbox>
+
+  <groupbox>
     <label><html:h2>划词翻译</html:h2></label>
     <html:div class="row"><html:span class="k">目标语言（Google 代码）</html:span>
       <html:input type="text" preference="extensions.zotero.clitrans.targetLang"/></html:div>
@@ -100,8 +111,8 @@
 
   <groupbox>
     <label><html:h2>整篇翻译（保留排版）</html:h2></label>
-    <html:div class="row"><html:span class="k">pdf2zh_next 路径</html:span>
-      <html:input type="text" placeholder="留空自动检测" preference="extensions.zotero.clitrans.pdf2zhPath"/></html:div>
+    <html:div class="row"><html:span class="k">Python 路径（可选）</html:span>
+      <html:input type="text" placeholder="留空自动检测（一键配置安装的环境）" preference="extensions.zotero.clitrans.pythonPath"/></html:div>
     <html:div class="row"><html:span class="k">双语排版</html:span>
       <menulist preference="extensions.zotero.clitrans.docLayout"><menupopup>
         <menuitem label="逐段对照（每段原文下方紧接译文，推荐）" value="interleave"/><menuitem label="左右对照（左原文·右译文）" value="side"/><menuitem label="交替页（一页原文·一页译文）" value="alternate"/><menuitem label="仅译文" value="mono"/>
@@ -111,7 +122,7 @@
     <checkbox label="参考文献列表保留原文（避免排版挤压）" preference="extensions.zotero.clitrans.skipReferences"/>
     <checkbox label="翻译表格内文字（实验性）" preference="extensions.zotero.clitrans.translateTables"/>
     <checkbox label="逐段对照：含分式等复杂公式的段落让模型看图翻译，公式按 LaTeX 排版（GPT / Claude / Gemini，略多耗额度）" preference="extensions.zotero.clitrans.visionFormulas"/>
-    <html:div class="hint" style="margin-left:0">用法：在文库里右键条目 →「智译：整篇翻译」→ 选择引擎；排版在「智译：排版」或阅读器工具栏的「排版」按钮里切换，已翻译过的文献换排版不会重新翻译。GPT / Claude / Gemini 会把几十个段落合并成一次调用。「逐段对照」直接从原 PDF 裁切原文，每段下方紧接译文，公式和图表原样保留，图中文字（含图片里的文字，用系统自带的文字识别）会翻译后叠加在图的副本上；同一段落再次生成时走本地缓存，不重复消耗额度。左右对照、交替页、仅译文也用同一套处理：原文页面保持原样，译文按页排在旁边或后面，公式和图表处理与逐段对照一致。未安装 pdf2zh_next 时，在终端运行：uv tool install --python 3.12 pdf2zh_next</html:div>
+    <html:div class="hint" style="margin-left:0">用法：在文库里右键条目 →「智译：整篇翻译」→ 选择引擎；排版在「智译：排版」或阅读器工具栏的「排版」按钮里切换，已翻译过的文献换排版不会重新翻译。GPT / Claude / Gemini 会把几十个段落合并成一次调用。「逐段对照」直接从原 PDF 裁切原文，每段下方紧接译文，公式和图表原样保留，图中文字（含图片里的文字，macOS 用系统文字识别，Windows 用 RapidOCR）会翻译后叠加在图的副本上；同一段落再次生成时走本地缓存，不重复消耗额度。左右对照、交替页、仅译文也用同一套处理：原文页面保持原样，译文按页排在旁边或后面，公式和图表处理与逐段对照一致。运行环境用本页顶部的「一键配置翻译环境」安装。</html:div>
   </groupbox>
 
   <groupbox>

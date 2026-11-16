@@ -53,6 +53,33 @@
         out.textContent = "你的 Codex 可用模型：\n" + models.map((m) => "• " + m.id + " — " + m.description).join("\n");
       } catch (e) { out.textContent = "⚠️ " + ((e && e.message) || e); }
     });
+    const envOut = document.getElementById("clitrans-env-out");
+    let busy = false;
+    document.getElementById("clitrans-env-check").addEventListener("command", async () => {
+      if (busy) return;
+      envOut.textContent = "检测中…";
+      try { envOut.textContent = await api.checkEnvironment(); }
+      catch (e) { envOut.textContent = "⚠️ " + ((e && e.message) || e); }
+    });
+    document.getElementById("clitrans-env-setup").addEventListener("command", async () => {
+      if (busy) return;
+      busy = true;
+      const btn = document.getElementById("clitrans-env-setup");
+      btn.disabled = true;
+      let text = "";
+      const log = (s) => {
+        text = (text + "\n" + s).slice(-8000);
+        envOut.textContent = text.trim();
+        envOut.scrollTop = envOut.scrollHeight;
+      };
+      try {
+        await api.setupEnvironment(log);
+        log("\n" + await api.checkEnvironment());
+      } catch (e) {
+        log("\n⚠️ 配置中断：" + ((e && e.message) || e) +
+          "\n可以再点一次「一键配置翻译环境」继续（已装好的部分会跳过）。网络慢时勾选「使用国内镜像」。");
+      } finally { busy = false; btn.disabled = false; }
+    });
     document.getElementById("clitrans-detect").addEventListener("command", () => {
       const s = showSetup();
       out.textContent =

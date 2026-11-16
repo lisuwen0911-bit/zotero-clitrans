@@ -7,6 +7,11 @@ import logging
 import os
 import sys
 
+try:  # Windows pipes default to the ANSI code page; the plugin reads UTF-8
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001
+    pass
+
 LAYOUT_SUFFIX = {"side": "side", "stacked": "stacked", "alternate": "alt"}
 
 

@@ -16,6 +16,7 @@ import os
 import collections
 import re
 import statistics
+import shutil
 import subprocess
 import sys
 import threading
@@ -29,9 +30,35 @@ import pymupdf
 R = pymupdf.Rect
 TEXT_LABELS = {"title", "plain text", "figure_caption", "table_caption", "table_footnote"}
 VISUAL_LABELS = {"figure", "table"}
-CACHE_DIR = os.path.expanduser("~/Library/Caches/clitrans")
-FONT_DIR = os.path.expanduser("~/.cache/babeldoc/fonts")
+
+
+def _cache_dir():
+    """Translation cache: ~/Library/Caches (macOS), %LOCALAPPDATA% (Windows), ~/.cache (Linux)."""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Caches/clitrans")
+    if os.name == "nt":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local"), "clitrans", "Cache")
+    return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "clitrans")
+
+
+CACHE_DIR = _cache_dir()
+FONT_DIR = os.path.join(os.path.expanduser("~"), ".cache", "babeldoc", "fonts")  # BabelDOC's own font cache
 FONT_FILE = "SourceHanSerifCN-Regular.ttf"
+
+
+def ensure_font():
+    """The Chinese font Story typesets with; BabelDOC downloads it on first use (any OS)."""
+    if os.path.exists(os.path.join(FONT_DIR, FONT_FILE)):
+        return True
+    try:
+        emit({"stage": "Download font"})
+        from babeldoc.assets.assets import get_font_and_metadata
+
+        path, _ = get_font_and_metadata(FONT_FILE)
+        return os.path.exists(str(path))
+    except Exception as e:  # noqa: BLE001
+        emit({"warn": "中文字体下载失败：" + str(e)[:200]})
+        return False
 TR_COLOR = "#1f3b73"
 FORMULA_COLOR = TR_COLOR  # formulas in a translation share its blue, so the whole translation stands apart
 
@@ -776,9 +803,12 @@ class Translator:
 
 # ------------------------------------------------------------------------------------- OCR
 def ocr_binary(src_dir):
+    """macOS: compile the Vision helper once. Elsewhere (or without Xcode tools): "rapidocr" if the
+    RapidOCR package is installed, else None (figure text then comes from the PDF / the vision model)."""
     src = os.path.join(src_dir, "ocr.swift")
-    if not os.path.exists(src):
-        return None
+    if (os.environ.get("CLITRANS_OCR") == "rapidocr" or sys.platform != "darwin" or not os.path.exists(src)
+            or not shutil.which("xcrun")):
+        return "rapidocr" if _rapidocr() else None
     tag = hashlib.sha1(open(src, "rb").read()).hexdigest()[:10]
     os.makedirs(CACHE_DIR, exist_ok=True)
     binp = os.path.join(CACHE_DIR, "clitrans-ocr-" + tag)
@@ -792,12 +822,73 @@ def ocr_binary(src_dir):
             return binp
     except Exception:  # noqa: BLE001
         pass
-    return None
+    return "rapidocr" if _rapidocr() else None  # no Xcode command line tools
+
+
+_RAPID = []
+
+
+def _rapidocr():
+    if not _RAPID:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+
+            _RAPID.append(RapidOCR())
+        except Exception:  # noqa: BLE001
+            _RAPID.append(None)
+    return _RAPID[0]
+
+
+def run_rapidocr(images):
+    """Same shape as the Vision helper: {file: [{"text", "conf", "box": [x0, y0, x1, y1] (0–1, top-left)}]}"""
+    eng = _rapidocr()
+    out = {}
+    for f in images if eng else []:
+        try:
+            pix = pymupdf.Pixmap(f)
+            w, h = float(pix.width), float(pix.height)
+            res, _ = eng(f)
+        except Exception:  # noqa: BLE001
+            continue
+        lines = []
+        for quad, text, conf in res or []:
+            xs = [p[0] for p in quad]
+            ys = [p[1] for p in quad]
+            lines.append({"text": text, "conf": float(conf),
+                          "box": [min(xs) / w, min(ys) / h, max(xs) / w, max(ys) / h]})
+        # RapidOCR cuts one printed line into pieces ("(1)" + "Supplier: w"): group pieces into rows
+        # (vertical overlap), then join neighbours whose gap is under one line height
+        rows = []
+        for d in sorted(lines, key=lambda d: (d["box"][1] + d["box"][3]) / 2):
+            b = d["box"]
+            row = next((r for r in rows if min(r["y1"], b[3]) - max(r["y0"], b[1]) > 0.5 * min(b[3] - b[1], r["y1"] - r["y0"])), None)
+            if row:
+                row["items"].append(d)
+                row["y0"], row["y1"] = min(row["y0"], b[1]), max(row["y1"], b[3])
+            else:
+                rows.append({"y0": b[1], "y1": b[3], "items": [d]})
+        merged = []
+        for row in rows:
+            cur = None
+            for d in sorted(row["items"], key=lambda d: d["box"][0]):
+                b = d["box"]
+                lh = (b[3] - b[1]) * h / w  # line height in width units
+                if cur and -0.6 * lh <= b[0] - cur["box"][2] < 0.9 * lh:
+                    cur["text"] += " " + d["text"]
+                    cur["box"] = [cur["box"][0], min(cur["box"][1], b[1]), b[2], max(cur["box"][3], b[3])]
+                    cur["conf"] = min(cur["conf"], d["conf"])
+                else:
+                    cur = dict(d)
+                    merged.append(cur)
+        out[f] = merged
+    return out
 
 
 def run_ocr(binp, images):
     if not binp or not images:
         return {}
+    if binp == "rapidocr":
+        return run_rapidocr(images)
     try:
         r = subprocess.run([binp] + images, capture_output=True, timeout=600, text=True)
     except Exception:  # noqa: BLE001
@@ -1632,6 +1723,7 @@ def main(argv):
         return 2
 
     # 1. layout -------------------------------------------------------------------------------
+    ensure_font()
     emit({"p": 1, "stage": "Analyze layout"})
     model = LayoutModel()
     per_page = []
@@ -2164,4 +2256,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    try:  # Windows pipes default to the ANSI code page; the plugin reads UTF-8
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
     sys.exit(main(sys.argv[1:]))

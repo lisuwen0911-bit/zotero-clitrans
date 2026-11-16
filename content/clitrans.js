@@ -205,14 +205,24 @@ function createCLITrans(env) {
         // agy's print mode takes no inline images: its agent opens the PNG files itself
         pics = "\n\nThe images, in order (open EVERY one with your file viewing tool before answering; " +
           "do not guess from the extracted text):\n" + images.map((p, i) => "[" + (i + 1) + "] " + p).join("\n");
-        for (const p of images) dirs.add(String(p).replace(/\/[^/]*$/, ""));
+        for (const p of images) dirs.add(String(p).replace(/[\\/][^\\/]*$/, ""));
       }
-      const prompt = (system ? system + pics + "\n\n----- INPUT -----\n" : pics) + user;
+      let prompt = (system ? system + pics + "\n\n----- INPUT -----\n" : pics) + user;
+      let promptFile = null;
+      if (IS_WIN && prompt.length > 20000) {
+        // Windows caps a command line at ~32k characters: hand a long prompt over as a file
+        promptFile = joinPath(tmpDir(), "clitrans-agy-" + uid() + ".txt");
+        await Zotero.File.putContentsAsync(promptFile, prompt);
+        dirs.add(tmpDir());
+        prompt = "Read the file " + promptFile + " with your file viewing tool. It contains your complete instructions " +
+          "and input. Follow those instructions exactly and output only the result they ask for.";
+      }
       const args = buildAgyArgs(prompt);
       for (const d of dirs) args.push("--add-dir", d);
       const r = await runProcess(bin, args, {
         workdir: tmpDir(), timeoutMs: ((Number(pref("cliTimeoutSec")) || 180) + 15) * 1000,
       });
+      if (promptFile) { try { await IOUtils.remove(promptFile); } catch (e) {} }
       const out = String(r.stdout || "").trim();
       if (r.exitCode !== 0 || !out) throw new Error("Gemini（agy）调用失败：" + errText(r));
       return out;
@@ -252,50 +262,112 @@ function createCLITrans(env) {
   function fileExists(p) {
     try { return !!p && Zotero.File.pathToFile(p).exists(); } catch (e) { return false; }
   }
-  function searchPATH() {
+  // ---- platform: macOS / Linux / Windows
+  const IS_WIN = (() => { try { return !!Zotero.isWin; } catch (e) { return false; } })();
+  const IS_MAC = (() => { try { return !!Zotero.isMac; } catch (e) { return false; } })();
+  const PATH_SEP = IS_WIN ? ";" : ":";
+  function envVar(name) {
+    try { return env.Services.env.get(name) || ""; } catch (e) { return ""; }
+  }
+  function winDirs() {
+    const h = homeDir();
+    const appdata = envVar("APPDATA") || joinPath(h, "AppData", "Roaming");
+    const local = envVar("LOCALAPPDATA") || joinPath(h, "AppData", "Local");
+    return [
+      joinPath(h, ".local", "bin"), joinPath(appdata, "npm"), joinPath(h, ".cargo", "bin"), joinPath(h, ".bun", "bin"),
+      joinPath(local, "Programs", "Antigravity", "bin"), joinPath(local, "Programs", "antigravity", "bin"),
+      joinPath(local, "Volta", "bin"), joinPath(local, "pnpm"),
+      joinPath(envVar("ProgramFiles") || "C:\\Program Files", "nodejs"),
+    ];
+  }
+  function unixDirs() {
     const h = homeDir();
     return [
       "/opt/homebrew/bin", "/usr/local/bin", h + "/.local/bin", h + "/.npm-global/bin",
-      h + "/.bun/bin", h + "/.volta/bin", h + "/.cargo/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
-    ].join(":");
+      h + "/.bun/bin", h + "/.volta/bin", h + "/.cargo/bin", h + "/.antigravity/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+    ];
+  }
+  /** PATH for child processes: the user's own PATH plus the usual install folders (Zotero is often
+   *  started without the shell's PATH, especially on macOS). */
+  function searchPATH() {
+    const extra = IS_WIN ? winDirs() : unixDirs();
+    const own = envVar("PATH").split(PATH_SEP).filter(Boolean);
+    const seen = new Set();
+    return (IS_WIN ? own.concat(extra) : extra.concat(own)).filter((d) => !seen.has(d) && seen.add(d)).join(PATH_SEP);
+  }
+  /** Look a command up in PATH (+ usual folders); on Windows also name.exe / .cmd / .bat. */
+  function whichTool(name) {
+    const exts = IS_WIN ? [".exe", ".cmd", ".bat", ""] : [""];
+    for (const d of searchPATH().split(PATH_SEP)) {
+      for (const x of exts) {
+        const c = joinPath(d, name + x);
+        if (fileExists(c)) return c;
+      }
+    }
+    return null;
   }
   const CANDIDATES = {
-    codex: () => [
+    codex: () => IS_WIN ? [] : [
       "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
       "/Applications/Codex.app/Contents/Resources/codex",
-      "/opt/homebrew/bin/codex", "/usr/local/bin/codex", homeDir() + "/.local/bin/codex",
-      homeDir() + "/.npm-global/bin/codex",
     ],
-    claude: () => [
-      "/opt/homebrew/bin/claude", "/usr/local/bin/claude", homeDir() + "/.local/bin/claude",
-      homeDir() + "/.claude/local/claude", homeDir() + "/.npm-global/bin/claude",
-    ],
-    agy: () => [
-      homeDir() + "/.local/bin/agy", "/opt/homebrew/bin/agy", "/usr/local/bin/agy", homeDir() + "/.antigravity/bin/agy",
-    ],
-    gemini: () => [
-      "/opt/homebrew/bin/gemini", "/usr/local/bin/gemini", homeDir() + "/.local/bin/gemini",
-      homeDir() + "/.npm-global/bin/gemini", homeDir() + "/.bun/bin/gemini",
-    ],
-    pdf2zh: () => [
-      homeDir() + "/.local/bin/pdf2zh_next", "/opt/homebrew/bin/pdf2zh_next", "/usr/local/bin/pdf2zh_next",
-      homeDir() + "/.local/bin/pdf2zh",
-    ],
+    claude: () => IS_WIN ? [joinPath(homeDir(), ".local", "bin", "claude.exe")] : [homeDir() + "/.claude/local/claude"],
+    agy: () => IS_WIN ? [] : [homeDir() + "/.antigravity/bin/agy"],
+    gemini: () => [],
+    pdf2zh: () => [],
+    uv: () => IS_WIN ? [joinPath(homeDir(), ".local", "bin", "uv.exe"), joinPath(homeDir(), ".cargo", "bin", "uv.exe")] : [],
   };
+  const TOOL_NAMES = { codex: ["codex"], claude: ["claude"], agy: ["agy"], gemini: ["gemini"], pdf2zh: ["pdf2zh_next", "pdf2zh"], uv: ["uv"] };
   function resolveTool(kind) {
     const prefName = { codex: "codexPath", claude: "claudePath", gemini: "geminiPath", agy: "agyPath", pdf2zh: "pdf2zhPath" }[kind];
-    const configured = (pref(prefName) || "").trim();
+    const configured = prefName ? (pref(prefName) || "").trim() : "";
     if (configured) return fileExists(configured) ? configured : null;
     for (const c of CANDIDATES[kind]()) if (fileExists(c)) return c;
+    for (const n of TOOL_NAMES[kind] || [kind]) {
+      const w = whichTool(n);
+      if (w) return w;
+    }
     return null;
+  }
+  /** How to start a program. Windows cannot start npm's .cmd shims directly (and cmd.exe mangles
+   *  long multi-line arguments), so a shim is turned back into "node <script.js>". */
+  const launchCache = new Map();
+  async function launchSpec(command) {
+    if (!IS_WIN || !/\.(cmd|bat)$/i.test(command)) return { command, prefix: [] };
+    if (launchCache.has(command)) return launchCache.get(command);
+    let spec = null;
+    try {
+      const text = String(await Zotero.File.getContentsAsync(command));
+      const dir = command.replace(/[\\/][^\\/]*$/, "");
+      // npm shims: "%~dp0\node_modules\pkg\cli.js" (old) or "%dp0%\node_modules\pkg\cli.js" (new)
+      const m = text.match(/"%(?:~dp0|dp0%)\\?([^"%]+?\.(?:js|cjs|mjs))"/i);
+      if (m) {
+        const script = joinPath(dir, ...m[1].split(/[\\/]/));
+        const node = fileExists(joinPath(dir, "node.exe")) ? joinPath(dir, "node.exe") : whichTool("node");
+        if (node && fileExists(script)) spec = { command: node, prefix: [script] };
+      }
+      const e = !spec && [...text.matchAll(/"%(?:~dp0|dp0%)\\?([^"%]+?\.exe)"/gi)].find((x) => !/(^|\\)node\.exe$/i.test(x[1]));
+      if (e) {
+        const exe = joinPath(dir, ...e[1].split(/[\\/]/));
+        if (fileExists(exe)) spec = { command: exe, prefix: [] };
+      }
+    } catch (e) { LOG("shim parse failed", command, e); }
+    if (!spec) {
+      const comspec = envVar("ComSpec") || "C:\\Windows\\System32\\cmd.exe";
+      spec = { command: comspec, prefix: ["/d", "/s", "/c", command] };
+    }
+    launchCache.set(command, spec);
+    return spec;
   }
 
   async function runProcess(command, args, opts = {}) {
     const { Subprocess, setTimeout, clearTimeout } = env;
+    const spec = await launchSpec(command);
     const proc = await Subprocess.call({
-      command,
-      arguments: args,
-      environment: Object.assign({ PATH: searchPATH(), NO_COLOR: "1" }, opts.env || {}),
+      command: spec.command,
+      arguments: spec.prefix.concat(args),
+      // UTF-8 everywhere: Windows would otherwise give Python a GBK/cp1252 stdout
+      environment: Object.assign({ PATH: searchPATH(), NO_COLOR: "1", PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, opts.env || {}),
       environmentAppend: true,
       workdir: opts.workdir || undefined,
       stderr: "pipe",
@@ -1569,17 +1641,43 @@ function createCLITrans(env) {
     if (pct >= 3 && pct < 99) parts_.push("约剩 " + fmtDuration(elapsedMs * (100 - pct) / pct));
     return parts_.join(" · ");
   }
-  /** pdf2zh_next is a uv/pip entry script; its shebang points at the venv's python. */
-  async function pdf2zhPython(scriptPath) {
-    for (const c of [
-      homeDir() + "/.local/share/uv/tools/pdf2zh-next/bin/python",
-      homeDir() + "/.local/share/uv/tools/pdf2zh_next/bin/python",
-    ]) if (fileExists(c)) return c;
-    try {
-      const head = (await Zotero.File.getContentsAsync(scriptPath, null, 400)) || "";
-      const m = String(head).match(/^#!\s*(\S+python[\d.]*)\s*$/m);
-      if (m && fileExists(m[1])) return m[1];
-    } catch (e) {}
+  /** uv's tool folder: $UV_TOOL_DIR, else ~/.local/share/uv/tools (macOS/Linux) or %APPDATA%\uv\tools. */
+  function uvToolDirs() {
+    const out = [];
+    if (envVar("UV_TOOL_DIR")) out.push(envVar("UV_TOOL_DIR"));
+    if (IS_WIN) {
+      out.push(joinPath(envVar("APPDATA") || joinPath(homeDir(), "AppData", "Roaming"), "uv", "tools"));
+      out.push(joinPath(envVar("APPDATA") || joinPath(homeDir(), "AppData", "Roaming"), "uv", "data", "tools"));
+    } else {
+      out.push(joinPath(envVar("XDG_DATA_HOME") || joinPath(homeDir(), ".local", "share"), "uv", "tools"));
+    }
+    return out;
+  }
+  function venvPython(venv) {
+    return IS_WIN ? joinPath(venv, "Scripts", "python.exe") : joinPath(venv, "bin", "python");
+  }
+  /** The Python that has pdf2zh_next / BabelDOC installed (what 整篇翻译 runs on). */
+  async function findPython() {
+    const configured = (pref("pythonPath") || "").trim();
+    if (configured && fileExists(configured)) return configured;
+    for (const d of uvToolDirs()) {
+      for (const name of ["pdf2zh-next", "pdf2zh_next"]) {
+        const c = venvPython(joinPath(d, name));
+        if (fileExists(c)) return c;
+      }
+    }
+    const script = resolveTool("pdf2zh");
+    if (script && !IS_WIN) {
+      try {  // pip/uv entry script: its shebang names the venv's python
+        const head = (await Zotero.File.getContentsAsync(script, null, 400)) || "";
+        const m = String(head).match(/^#!\s*(\S+python[\d.]*)\s*$/m);
+        if (m && fileExists(m[1])) return m[1];
+      } catch (e) {}
+    }
+    if (script && IS_WIN) {  // uv/pip put pdf2zh_next.exe in <venv>\Scripts or a shim next to the venv
+      const c = joinPath(script.replace(/[\\/][^\\/]*$/, ""), "python.exe");
+      if (fileExists(c)) return c;
+    }
     return null;
   }
   /** Read a text file shipped inside the plugin. Zotero 10's Zotero.HTTP rejects jar: URLs
@@ -1596,7 +1694,7 @@ function createCLITrans(env) {
   }
   async function writeRunner(dir) {
     try {
-      for (const f of ["p2z_runner.py", "interleave.py", "ocr.swift"]) {
+      for (const f of ["p2z_runner.py", "interleave.py", "ocr.swift", "setup_check.py"]) {
         const src = await readPackaged("content/" + f);
         if (!src) throw new Error("empty " + f);
         await Zotero.File.putContentsAsync(joinPath(dir, f), src);
@@ -1606,10 +1704,8 @@ function createCLITrans(env) {
   }
   /** Python + runner script for a job directory, or a user-facing error. */
   async function prepareRunner(outDir) {
-    const pdf2zh = resolveTool("pdf2zh");
-    if (!pdf2zh) throw new Error("找不到 pdf2zh_next，请先安装（见设置页说明）并填写路径");
-    const python = await pdf2zhPython(pdf2zh);
-    if (!python) throw new Error("找不到 pdf2zh_next 自带的 Python。请重新安装：uv tool install --python 3.12 pdf2zh_next");
+    const python = await findPython();
+    if (!python) throw new Error("整篇翻译的运行环境还没有安装。\n请打开 Zotero 设置 → 智译 CLI → 「一键配置翻译环境」，等它装完再试（只需一次，约 5–15 分钟）。");
     const runner = await writeRunner(outDir);
     if (!runner) throw new Error("无法从插件包中读取翻译脚本 p2z_runner.py（插件 " + (env.version || "") + "）。请重新安装智译插件后重试。");
     return { python, runner, interleave: joinPath(outDir, "interleave.py") };
@@ -1798,6 +1894,135 @@ function createCLITrans(env) {
     return added;
   }
 
+  // ------------------------------------------------------------ one-click setup (macOS / Windows / Linux)
+  const PYPI_MIRROR = "https://pypi.tuna.tsinghua.edu.cn/simple";
+  const PY_MIRROR = "https://registry.npmmirror.com/-/binary/python-build-standalone";
+  function setupEnv(withPythonMirror) {
+    const e = {};
+    if (pref("useMirror")) {
+      e.UV_DEFAULT_INDEX = PYPI_MIRROR;
+      e.UV_INDEX_URL = PYPI_MIRROR;  // older uv
+      if (withPythonMirror) e.UV_PYTHON_INSTALL_MIRROR = PY_MIRROR;
+    }
+    return e;
+  }
+  async function runStep(cmd, args, log, opts = {}) {
+    log("\n$ " + String(cmd).split(/[\\/]/).pop() + " " + args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
+    let last = 0;
+    const r = await runProcess(cmd, args, Object.assign({
+      workdir: tmpDir(), timeoutMs: 45 * 60 * 1000,
+      onOutput: (s) => {  // uv/pip progress bars redraw constantly: show at most a few lines per second
+        const now = Date.now();
+        const lines = String(s).split(/\r|\n/).map((x) => x.trim()).filter(Boolean);
+        if (lines.length && now - last > 300) { last = now; log(lines[lines.length - 1].slice(0, 200)); }
+      },
+    }, opts));
+    if (r.exitCode !== 0) throw new Error(String(cmd).split(/[\\/]/).pop() + " 失败：" + errText(r));
+    return r;
+  }
+  async function installUv(log) {
+    if (IS_WIN) {
+      const ps = joinPath(envVar("SystemRoot") || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+      await runStep(ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"], log);
+    } else {
+      await runStep("/bin/sh", ["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"], log);
+    }
+    launchCache.clear();
+    const uv = resolveTool("uv");
+    if (!uv) throw new Error("uv 安装后仍未找到。请手动安装 uv（https://docs.astral.sh/uv/）后重试。");
+    return uv;
+  }
+  /** Run setup_check.py with the environment's Python; returns its JSON report. */
+  async function checkPython(python, warmup, log) {
+    const dir = joinPath(tmpDir(), "clitrans-setup");
+    await IOUtils.makeDirectory(dir, { ignoreExisting: true });
+    const src = await readPackaged("content/setup_check.py");
+    const script = joinPath(dir, "setup_check.py");
+    await Zotero.File.putContentsAsync(script, src);
+    const r = await runProcess(python, [script].concat(warmup ? ["--warmup"] : []), {
+      workdir: dir, timeoutMs: (warmup ? 30 : 2) * 60 * 1000,
+      onOutput: log ? (s) => { const l = String(s).trim().split("\n").pop(); if (l && !l.startsWith("@@S")) log(l.slice(0, 200)); } : undefined,
+    });
+    const m = String(r.stdout).match(/^@@S (.+)$/m);
+    if (!m) throw new Error("环境检查失败：" + errText(r));
+    return JSON.parse(m[1]);
+  }
+  /** Everything 整篇翻译 needs: uv → pdf2zh_next (Python 3.12) → extras → font + layout model. */
+  async function setupEnvironment(log) {
+    log = log || (() => {});
+    const t0 = Date.now();
+    log("== 1/4 安装工具 uv" + (pref("useMirror") ? "（使用国内镜像）" : ""));
+    let uv = resolveTool("uv");
+    if (uv) log("已安装：" + uv);
+    else uv = await installUv(log);
+
+    log("\n== 2/4 安装翻译引擎 pdf2zh_next / BabelDOC（首次约 5–15 分钟）");
+    let python = await findPython();
+    if (python) log("已安装：" + python);
+    else {
+      const args = ["tool", "install", "--python", "3.12", "pdf2zh_next"];
+      try { await runStep(uv, args, log, { env: setupEnv(true) }); } catch (e) {
+        if (!pref("useMirror")) throw e;
+        log("镜像安装 Python 失败，改用官方源重试…");
+        await runStep(uv, args, log, { env: setupEnv(false) });
+      }
+      python = await findPython();
+      if (!python) throw new Error("pdf2zh_next 已安装，但找不到它的 Python。请在设置里手动填写 Python 路径。");
+    }
+
+    log("\n== 3/4 安装公式排版、模糊匹配与文字识别组件");
+    await runStep(uv, ["pip", "install", "--python", python, "matplotlib", "rapidfuzz"], log, { env: setupEnv(false) });
+    // RapidOCR reads figure text on Windows/Linux (macOS uses Vision); --no-deps keeps opencv single
+    await runStep(uv, ["pip", "install", "--python", python, "--no-deps", "rapidocr_onnxruntime", "pyclipper", "shapely", "six", "pyyaml"],
+      log, { env: setupEnv(false) });
+
+    log("\n== 4/4 下载中文字体与版面识别模型");
+    const st = await checkPython(python, true, log);
+    log("\n" + formatEnvReport(st) + "\n\n全部完成，用时 " + fmtDuration(Date.now() - t0) + "。现在可以在条目右键菜单里使用「智译：整篇翻译」。");
+    return st;
+  }
+  function formatEnvReport(st) {
+    const ok = (b) => (b ? "✓" : "✗");
+    return [
+      "Python " + st.version + "：" + st.python,
+      ok(st.pymupdf && st.babeldoc) + " PDF 解析与版面识别（PyMuPDF / BabelDOC）",
+      ok(st.matplotlib) + " 公式排版（matplotlib）",
+      ok(st.rapidfuzz) + " 图中文字匹配（rapidfuzz）",
+      ok(!!st.ocr) + " 图片文字识别（" + (st.ocr === "vision" ? "macOS 系统 OCR" : st.ocr === "rapidocr" ? "RapidOCR" : "未安装") + "）",
+      ok(st.font) + " 中文字体（思源宋体）",
+      ok(st.model) + " 版面识别模型",
+    ].join("\n");
+  }
+  /** Status of everything, for the settings page. */
+  async function checkEnvironment() {
+    const lines = [];
+    const uv = resolveTool("uv");
+    const python = await findPython();
+    lines.push("系统：" + (IS_WIN ? "Windows" : IS_MAC ? "macOS" : "Linux"));
+    lines.push((uv ? "✓ uv：" + uv : "✗ uv 未安装（点「一键配置翻译环境」自动安装）"));
+    if (python) {
+      try { lines.push(formatEnvReport(await checkPython(python, false))); } catch (e) { lines.push("✗ Python 环境异常：" + e.message); }
+    } else {
+      lines.push("✗ 整篇翻译环境未安装（点「一键配置翻译环境」，只需一次）");
+    }
+    lines.push("", "翻译引擎：", "✓ Google（免费，无需配置）");
+    const tool = (k, label, hint) => {
+      const p = resolveTool(k);
+      lines.push(p ? "✓ " + label + "：" + p : "✗ " + label + " 未找到 — " + hint);
+    };
+    tool("codex", "GPT（Codex CLI）", IS_WIN || !IS_MAC
+      ? "安装 Node.js 后运行  npm install -g @openai/codex ，再运行  codex login  用 ChatGPT 账号登录"
+      : "安装 ChatGPT 桌面版（自带 Codex），或  npm install -g @openai/codex  后  codex login");
+    tool("claude", "Claude（Claude Code）", IS_WIN
+      ? "先安装 Git for Windows，再在 PowerShell 运行  irm https://claude.ai/install.ps1 | iex ，然后运行  claude  登录"
+      : "终端运行  curl -fsSL https://claude.ai/install.sh | bash ，再运行  claude  登录");
+    const ch = geminiChannel();
+    lines.push(ch === "api" ? "✓ Gemini：API Key" : ch === "agy" ? "✓ Gemini：Antigravity（" + resolveTool("agy") + "）"
+      : ch === "cli" ? "✓ Gemini：Gemini CLI（不支持看图）"
+        : "✗ Gemini 未配置 — 安装并登录 Antigravity，或在下方填写 Gemini API Key");
+    return lines.join("\n");
+  }
+
   // ------------------------------------------------------------ test helper
   async function selfTest(engine) {
     const t0 = Date.now();
@@ -1824,6 +2049,7 @@ function createCLITrans(env) {
     // runtime
     ensureTokens, registerEndpoints, unregisterEndpoints, buildPopup, buildToolbar, attachAllReaders,
     detachAllReaders, translate, translateDocument, relayoutDocument, saveToNote, selfTest, describeSetup,
+    setupEnvironment, checkEnvironment, findPython, IS_WIN,
     resolveTool, ENGINES, LAYOUTS, engineLabel, docLayout, listCodexModels,
     // exported for tests
     _t: {
