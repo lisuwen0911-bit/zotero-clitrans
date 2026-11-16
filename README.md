@@ -1,72 +1,240 @@
-# 智译 CLI Translate（zotero-clitrans）
+<p align="center">
+  <img src="assets/icon.png" width="120" alt="Verso icon">
+</p>
 
-Zotero 7 / 8 / 9 / 10 文献翻译插件，**Windows 和 macOS 通用**。
+<h1 align="center">Verso for Zotero</h1>
 
-- **划词翻译**：在 PDF 里选中文字即出译文，可一键存入笔记。
-- **段落翻译**：按住 Alt 点击任意段落，只翻译这一段。
-- **整篇翻译（保留排版）**：生成双语 PDF，作为附件挂在条目下。有四种排版：
-  - 逐段对照：每段原文下面紧接译文（推荐）；
-  - 左右对照：左原文、右译文；
-  - 交替页：一页原文、一页译文；
-  - 仅译文。
+<p align="center">
+  在 Zotero 里读懂外文文献：划词翻译、段落翻译、保留排版的整篇双语 PDF。<br>
+  <sub>原名「智译 CLI Translate」，自 0.7.0 起更名为 Verso。</sub>
+</p>
 
-  公式、图、表都完整保留：译文里的公式用 LaTeX 重新排版，图表中的文字也会翻译。
-- **多种引擎**：
-  - Google：免费，装好即用；
-  - GPT：通过 Codex CLI，用 ChatGPT 订阅额度；
-  - Claude：通过 Claude Code，用 Claude 订阅额度；
-  - Gemini：通过 Antigravity 或 API Key。
+<p align="center">
+  <img alt="version" src="https://img.shields.io/badge/version-0.7.0-D8432E">
+  <img alt="zotero" src="https://img.shields.io/badge/Zotero-7%20%E2%80%93%2010-0F6E6E">
+  <img alt="platform" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-supported-1C1B19">
+  <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
+</p>
 
-  用 AI 引擎时，复杂公式会"看图识别"，上下标、分式不会乱。
-- **术语表**、**翻译缓存**（同一篇换排版不重复消耗额度）、**MCP 接口**（让 Claude / Codex 读取你的文献库）。
+> **Verso** 是书页的「背面 / 对页」。原文在一页，译文在它的对页——这就是这个插件做的事。
 
 ---
 
-## 1. 安装插件（1 分钟）
+## 目录
 
-1. 下载最新的 [`clitranslate-x.y.z.xpi`](https://github.com/lisuwen0911-bit/zotero-clitrans)：在仓库文件列表里点开最新版本号的 `.xpi`，再点 **Download raw file**。
-2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**，选中刚下载的 `.xpi`。
-3. 装好后：
-   - 划词翻译（Google 引擎）立即可用：打开任意 PDF，选中一段英文即可。
-   - 以后有新版本，Zotero 会自动更新。
+- [功能一览](#功能一览)
+- [安装](#安装)
+- [快速上手](#快速上手)
+  - [划词翻译](#1-划词翻译)
+  - [段落翻译](#2-段落翻译)
+  - [整篇翻译（保留排版）](#3-整篇翻译保留排版)
+- [翻译引擎](#翻译引擎)
+- [整篇翻译的运行环境](#整篇翻译的运行环境)
+- [设置项说明](#设置项说明)
+- [更多功能](#更多功能)
+- [常见问题](#常见问题)
+- [隐私](#隐私)
+- [从「智译 CLI Translate」升级](#从智译-cli-translate升级)
+- [更新日志](#更新日志)
+- [致谢与许可](#致谢与许可)
 
-## 2. 整篇翻译：一键配置运行环境（只需一次，5–15 分钟）
+---
 
-整篇翻译需要一个本地 Python 运行环境（PDF 解析、版面识别模型、公式排版、文字识别）。插件可以自动装好：
+## 功能一览
 
-1. 打开 Zotero **设置**（Windows：编辑 → 设置；macOS：Zotero → 设置）→ 左侧 **智译 CLI**。
+| 功能 | 怎么用 | 说明 |
+|---|---|---|
+| **划词翻译** | 在 PDF 里选中文字 | 选区弹窗里直接出译文，可换引擎、复制、一键存入笔记 |
+| **段落翻译** | 按住 `Alt`（macOS 为 `⌥ Option`）点击段落 | 圈出原文段落，译文卡片显示在它正下方 |
+| **整篇翻译** | 右键条目 →「Verso：整篇翻译（保留排版）」 | 生成双语 PDF 并挂在条目下，公式、图、表完整保留 |
+| **四种排版** | 右键菜单或阅读器工具栏「排版」 | 逐段对照 / 左右对照 / 交替页 / 仅译文，切换排版不重复翻译 |
+| **多种引擎** | 设置页选择 | Google 免费；GPT、Claude、Gemini 使用你本机已登录的订阅 |
+| **术语表** | 设置页填写 | 专业词汇的译法前后一致 |
+| **翻译缓存** | 自动 | 同一篇文献换排版、重新生成都不会重复消耗额度 |
+| **MCP 接口** | 设置页开启 | 让 Claude / Codex 直接读取你的 Zotero 文献库 |
+
+支持 **Zotero 7 / 8 / 9 / 10**，**Windows 和 macOS** 通用。
+
+---
+
+## 安装
+
+1. 在本仓库文件列表中点开最新的 [`verso-0.7.0.xpi`](verso-0.7.0.xpi)，再点 **Download raw file** 下载。
+   > 用 Firefox 下载时请右键链接选「另存为」，否则浏览器会尝试把它当作自己的扩展安装。
+2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**（Install Plugin From File…），选中刚下载的 `.xpi`。
+3. 安装完成后无需重启。以后有新版本，Zotero 会自动更新。
+
+装好后，**划词翻译和段落翻译立即可用**；整篇翻译需要先[配置一次运行环境](#整篇翻译的运行环境)。
+
+---
+
+## 快速上手
+
+### 1. 划词翻译
+
+1. 在 Zotero 里打开任意 PDF。
+2. 用鼠标选中一段文字。
+3. 选区弹窗底部会出现一张深色卡片，自动用默认引擎翻译。
+
+卡片上可以：
+
+- 点 **Google / GPT / Claude / Gemini** 换一个引擎重新翻译；
+- 点 **复制** 把译文放进剪贴板；
+- 点 **存入笔记**，原文和译文会追加到该条目下名为「划词翻译笔记」的笔记里（标题可在设置中修改）。
+
+> 如果不想每次选中都自动翻译，在设置里关掉「选中文字后自动用默认引擎翻译」，之后手动点引擎按钮即可。
+
+### 2. 段落翻译
+
+1. 在 PDF 阅读器里**按住 `Alt`（macOS：`⌥ Option`）点击任意一段**。
+2. 这一段会被圈出，译文卡片从它正下方滑出。
+3. 再点一次同一段，或点卡片右下角的 **✕**，即可收起。
+
+卡片同样支持换引擎、复制、存入笔记。可以同时展开多个段落。缩放页面时卡片会跟着段落移动。
+
+快捷键可以在设置里换成 `Ctrl`、`⌘ / Win`、`Shift`，或者关闭这个功能。段落翻译也可以单独指定引擎（例如划词用 Google，段落用 GPT）。
+
+### 3. 整篇翻译（保留排版）
+
+> 首次使用前请先完成[运行环境配置](#整篇翻译的运行环境)（只需一次）。
+
+1. 在文库里**右键条目 →「Verso：整篇翻译（保留排版）」→ 选一个引擎**。
+2. 等几分钟，Zotero 右下角会显示进度（识别段落 → 翻译段落 → 排版）。
+3. 完成后，双语 PDF 会作为附件出现在条目下并自动打开。
+
+四种排版：
+
+| 排版 | 效果 | 适合 |
+|---|---|---|
+| **逐段对照**（推荐） | 每段原文下面紧接译文 | 精读，逐段核对 |
+| **左右对照** | 左页原文、右页译文 | 宽屏并排阅读 |
+| **交替页** | 一页原文、一页译文 | 打印或翻页阅读 |
+| **仅译文** | 只保留译文，版式不变 | 快速通读 |
+
+切换排版的两个入口：
+
+- 文库右键 →「Verso：排版」：选择默认排版，或「按当前排版重新生成」；
+- 阅读器工具栏的 **排版** 按钮：为当前文献直接生成另一种排版。
+
+**换排版不会重新翻译**——已翻译的段落直接从本机缓存读取，不再消耗额度。
+
+公式、图、表的处理：
+
+- 译文里的公式用 LaTeX 重新排版，不会变成乱码；
+- 图表中的文字也会翻译；
+- 使用 GPT / Claude / Gemini 时，复杂公式会「看图识别」，上下标、分式都能正确还原；
+- 默认跳过参考文献列表（可在设置中修改）。
+
+---
+
+## 翻译引擎
+
+| 引擎 | 费用 | 需要什么 | 特点 |
+|---|---|---|---|
+| **Google** | 免费 | 无需配置 | 速度快；部分网络下会被限流（见[常见问题](#常见问题)） |
+| **GPT** | 走 ChatGPT 订阅额度 | 本机已登录的 [Codex CLI](https://github.com/openai/codex) | 译文质量高，支持看图识别公式 |
+| **Claude** | 走 Claude 订阅额度 | 本机已登录的 [Claude Code](https://claude.com/claude-code) | 译文质量高，支持看图识别公式 |
+| **Gemini** | 走订阅或 API 额度 | [Antigravity](https://antigravity.google/)（`agy`）或 Gemini API Key | 填 API Key 时没有命令行启动延迟 |
+
+GPT、Claude 用的是你**本机已经登录的命令行工具**，走你自己的订阅额度，**不需要 API Key**。
+
+### 安装命令行工具
+
+| 引擎 | Windows | macOS |
+|---|---|---|
+| **GPT**（Codex CLI） | 先装 [Node.js](https://nodejs.org/)，然后在 PowerShell 运行 `npm install -g @openai/codex`，再运行 `codex login` | 安装 ChatGPT 桌面版（自带 Codex），或 `npm install -g @openai/codex` 后 `codex login` |
+| **Claude**（Claude Code） | 先装 [Git for Windows](https://git-scm.com/download/win)，然后在 PowerShell 运行 `irm https://claude.ai/install.ps1 \| iex`，再运行 `claude` 登录 | 终端运行 `curl -fsSL https://claude.ai/install.sh \| bash`，再运行 `claude` 登录 |
+| **Gemini** | 安装并登录 [Antigravity](https://antigravity.google/)，或在设置页填写 Gemini API Key | 同左 |
+
+装好后，打开 **Zotero 设置 → Verso**，点 **「检测环境」**：找到的工具显示 ✓，没找到的会直接给出安装命令。每个引擎都有「测试」按钮。
+
+- GPT 的模型可以点「读取我的模型」，从你账号可用的模型里选。
+- 找不到命令行工具时，可以手动填写完整路径。例如 Windows 下 npm 安装的 Codex 一般在 `C:\Users\你的用户名\AppData\Roaming\npm\codex.cmd`。
+- 命令行引擎每次调用需要几秒启动时间，所以划词翻译想要即时响应的话，建议默认引擎用 Google 或填了 API Key 的 Gemini。
+
+---
+
+## 整篇翻译的运行环境
+
+整篇翻译需要一个本地 Python 环境（PDF 解析、版面识别模型、公式排版、文字识别）。插件可以一键装好，只需做一次，大约 5–15 分钟。
+
+1. 打开 Zotero **设置**（Windows：编辑 → 设置；macOS：Zotero → 设置）→ 左侧 **Verso**。
 2. 在最上面的「快速开始」里：
    - 国内网络保持勾选「使用国内镜像下载」（默认已勾选）；
    - 点 **「一键配置翻译环境」**。
-3. 下方会实时显示进度。插件会依次：
+3. 下方会实时显示进度。插件依次完成：
    1. 安装 [uv](https://docs.astral.sh/uv/)（Python 包管理器）；
    2. 用 uv 安装 [pdf2zh_next / BabelDOC](https://github.com/PDFMathTranslate/PDFMathTranslate-next)（自带 Python 3.12，不影响你电脑上已有的 Python）；
    3. 安装公式排版（matplotlib）、模糊匹配（rapidfuzz）、文字识别（RapidOCR）；
    4. 下载中文字体（思源宋体）和版面识别模型。
 4. 看到「全部完成」就可以用了。中途断网或失败，再点一次即可，已装好的部分会跳过。
 
-用法：在文库里**右键条目 →「智译：整篇翻译（保留排版）」→ 选引擎**。几分钟后双语 PDF 会作为附件出现在条目下并自动打开。排版在右键菜单「智译：排版」或阅读器工具栏的「排版」按钮里切换，换排版不会重新翻译。
+---
 
-## 3. 配置 AI 引擎（可选）
+## 设置项说明
 
-Google 免费引擎不需要任何配置。想要更好的译文和公式效果，可以配置下面任意一个。它们用的是你**本机已登录的命令行工具**，走你自己的订阅额度，不需要 API Key。
+位置：**Zotero 设置 → Verso**。
 
-装好后，在设置页点 **「检测环境」**。找到的工具会显示 ✓，没找到的会直接给出安装命令。
-
-| 引擎 | Windows | macOS |
+| 分组 | 设置项 | 说明 |
 |---|---|---|
-| **GPT**（Codex CLI） | 先装 [Node.js](https://nodejs.org/)，然后在 PowerShell 运行 `npm install -g @openai/codex`，再运行 `codex login`，用 ChatGPT 账号登录 | 装 ChatGPT 桌面版（自带 Codex），或 `npm install -g @openai/codex` 后 `codex login` |
-| **Claude**（Claude Code） | 先装 [Git for Windows](https://git-scm.com/download/win)，然后在 PowerShell 运行 `irm https://claude.ai/install.ps1 \| iex`，再运行 `claude` 登录 | 终端运行 `curl -fsSL https://claude.ai/install.sh \| bash`，再运行 `claude` 登录 |
-| **Gemini** | 安装并登录 [Antigravity](https://antigravity.google/)（自带 `agy` 命令行），或在设置页填写 Gemini API Key | 同左 |
+| 快速开始 | 检测环境 / 一键配置翻译环境 | 查看和安装整篇翻译所需组件 |
+| 划词翻译 | 目标语言 | Google 用语言代码（如 `zh-CN`），大模型用语言名称（如「简体中文」） |
+| | 默认引擎 | 划词时自动使用的引擎 |
+| | 选中文字后自动翻译 | 关闭后需手动点引擎按钮 |
+| | 笔记标题 | 「存入笔记」写入的笔记名称 |
+| 段落翻译 | 快捷键 | `Alt` / `Ctrl` / `⌘·Win` / `Shift` + 点击，或关闭 |
+| | 段落翻译引擎 | 可跟随默认引擎，也可单独指定 |
+| GPT / Claude | CLI 路径、模型、推理强度 | 留空自动检测 |
+| Gemini | API Key、模型、CLI 路径 | 二选一：API Key 或本机命令行 |
+| 整篇翻译 | 默认排版 | 四种排版之一 |
+| | 跳过参考文献 / 翻译表格 / 看图识别公式 | 按需开关 |
+| | 并行数、超时 | 命令行引擎的并发和单次超时 |
+| 术语表 | 每行一条 `原文=译文` | 对所有引擎生效 |
+| MCP | 开关与令牌 | 供 Claude / Codex 等读取文献库 |
 
-- 设置页每个引擎都有「测试」按钮，可以检查是否能正常调用。
-- GPT 的模型可以点「读取我的模型」，从你账号可用的模型里选。
-- 找不到命令行工具时，可以在设置页手动填写它的完整路径。例如 Windows 下 npm 安装的 Codex 一般在 `C:\Users\你的用户名\AppData\Roaming\npm\codex.cmd`。
+---
 
-## 4. 常见问题
+## 更多功能
+
+### 术语表
+
+在设置页的术语表里每行写一条，例如：
+
+```
+supply chain finance=供应链金融
+tokenization=代币化
+```
+
+翻译时会要求引擎遵守这些译法，并在译后再做一次替换，保证全文一致。
+
+### 翻译缓存
+
+每个段落的译文按「原文 + 引擎 + 目标语言 + 术语表」缓存在本机：
+
+- Windows：`%LOCALAPPDATA%\clitrans\Cache`
+- macOS：`~/Library/Caches/clitrans`
+
+同一篇文献换排版、重新生成、中断后重跑，都只翻译没翻过的部分。想强制重新翻译，删除上述文件夹即可。
+
+### MCP 接口
+
+开启后，插件在 Zotero 本地端口提供一个 [MCP](https://modelcontextprotocol.io/) 服务，Claude Code、Codex 等工具可以通过它检索你的文献库、读取条目信息和全文。地址和令牌显示在设置页，按页面提示复制到对应工具的配置里即可。接口只监听本机（`127.0.0.1`）。
+
+---
+
+## 常见问题
+
+**划词后一直「翻译中」，然后提示 Google 超时或被拒绝？**
+Google 的免费接口会对部分网络限流（返回人机验证页）。插件会在 10 秒后明确提示。解决办法：点卡片上的 GPT / Claude / Gemini，或在设置里把默认引擎换成其他引擎。
+
+**Alt + 点击没有反应？**
+- 确认是在 PDF 正文的文字上点击（扫描版 PDF 没有文字层，无法识别段落）；
+- 页面刚打开时文字还在加载，插件会提示「这一页的文字还在加载」，稍等再点；
+- 用命令行引擎（GPT / Claude）时需要等几秒，卡片上会有加载动画；
+- 检查设置里的段落翻译快捷键是否被改过或关闭。
 
 **一键配置失败 / 很慢？**
-保持勾选「使用国内镜像下载」后再试。如果卡在第 1 步（安装 uv），可以按 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/) 手动安装，再回来点「一键配置」。也可以在终端里手动执行（Windows 用 PowerShell）：
+保持勾选「使用国内镜像下载」后再试。如果卡在第 1 步（安装 uv），可以按 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/)手动安装，再回来点「一键配置」。也可以在终端里手动执行（Windows 用 PowerShell）：
 
 ```bash
 uv tool install --python 3.12 pdf2zh_next
@@ -74,22 +242,61 @@ uv tool install --python 3.12 pdf2zh_next
 
 执行完再点一次「一键配置翻译环境」，插件会补齐剩余组件。
 
-**整篇翻译提示"运行环境还没有安装"？**
-按第 2 节点「一键配置翻译环境」。如果你用其他方式装了 pdf2zh_next，可以在设置页「Python 路径」里填它的 Python：
+**整篇翻译提示「运行环境还没有安装」？**
+按上面的步骤点「一键配置翻译环境」。如果你用其他方式装了 pdf2zh_next，可以在设置页「Python 路径」里填它的 Python：
 - Windows：`…\uv\tools\pdf2zh-next\Scripts\python.exe`
 - macOS：`~/.local/share/uv/tools/pdf2zh-next/bin/python`
-
-**翻译会上传我的文献吗？**
-只有你选择的引擎会收到要翻译的文字（以及用 AI 引擎时的段落 / 图片截图），这和你平时直接使用这些服务一样。插件本身不收集任何数据。翻译缓存只保存在本机：
-- Windows：`%LOCALAPPDATA%\clitrans\Cache`
-- macOS：`~/Library/Caches/clitrans`
 
 **图里的文字没翻译 / 编号位置不对？**
 图中文字优先从 PDF 里提取。提取不到时用文字识别：macOS 用系统自带 OCR，Windows 用 RapidOCR。用 GPT / Claude / Gemini 引擎时，模型会直接看图读出文字和符号，效果最好。
 
+**选区弹窗里还有别的文本框和按钮？**
+那是你安装的其他 Zotero 插件添加的。Verso 只添加底部那张深色卡片。
+
+---
+
+## 隐私
+
+- 只有你选择的引擎会收到要翻译的文字（以及使用 AI 引擎时的段落 / 图片截图），这和你平时直接使用这些服务一样。
+- 插件本身不收集、不上传任何数据。
+- 翻译缓存只保存在本机。
+- MCP 接口只监听本机，并可设置访问令牌。
+
+---
+
+## 从「智译 CLI Translate」升级
+
+Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图标：
+
+- 已安装旧版的，直接安装 `verso-0.7.0.xpi` 即可**覆盖升级**，不需要先卸载；
+- 所有设置、术语表、翻译缓存都会保留；
+- 设置页的名称从「智译 CLI」变为「Verso」，右键菜单从「智译：…」变为「Verso：…」；
+- 仓库地址从 `zotero-clitrans` 变为 `zotero-verso`，旧链接会自动跳转。
+
+---
+
+## 更新日志
+
+**0.7.0**
+- 更名为 **Verso**，新图标；
+- 划词翻译改为深色译文卡片，段落翻译改为「圈出原文 + 下方译文卡片」，带加载动画；
+- 修复：段落靠近页面底部时译文框被截断；
+- 修复：Google 被限流时无限等待，现在 10 秒内给出明确提示；
+- Alt + 点击没有识别到段落时给出提示，不再静默。
+
+**0.6.0**
+- Windows 与 macOS 通用，一键配置运行环境，环境检测；
+- Windows 使用 RapidOCR 识别图中文字。
+
+更早的版本见提交历史。
+
+---
+
 ## 致谢与许可
 
 - 版面识别和 PDF 处理基于 [BabelDOC / pdf2zh_next](https://github.com/PDFMathTranslate/PDFMathTranslate-next)（AGPL-3.0）和 [PyMuPDF](https://pymupdf.readthedocs.io/)（AGPL-3.0）。
-- 文字识别用 [RapidOCR](https://github.com/RapidAI/RapidOCR)。
+- 文字识别使用 [RapidOCR](https://github.com/RapidAI/RapidOCR)。
 
 本项目以 **AGPL-3.0** 许可开源，与上述依赖保持一致，详见 [LICENSE](LICENSE)。
+
+Verso 是独立的第三方插件，与 Zotero 官方无关。

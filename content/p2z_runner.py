@@ -1,4 +1,4 @@
-# 智译 CLI — runs pdf2zh_next in-process and prints machine-readable progress.
+# Verso — runs pdf2zh_next in-process and prints machine-readable progress.
 # Translate:  <pdf2zh_next's python> p2z_runner.py <same args as pdf2zh_next>
 # Re-layout:  <pdf2zh_next's python> p2z_runner.py --relayout <original.pdf> <mono.pdf> <layout> <out.pdf>
 import asyncio

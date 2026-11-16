@@ -45,7 +45,7 @@
       <menulist preference="extensions.zotero.clitrans.paraEngine"><menupopup>
         <menuitem label="跟随默认引擎" value=""/><menuitem label="Google（免费）" value="google"/><menuitem label="GPT · Codex CLI" value="codex"/><menuitem label="Claude · Claude Code CLI" value="claude"/><menuitem label="Gemini" value="gemini"/>
       </menupopup></menulist></html:div>
-    <html:div class="hint" style="margin-left:0">在 PDF 阅读器里按住快捷键点击任意一段，只翻译这一段：原文高亮，译文显示在它正下方，可换引擎、复制、存入笔记。再点一次同一段即可收起。修改快捷键后对新打开的文献立即生效。</html:div>
+    <html:div class="hint" style="margin-left:0">在 PDF 阅读器里按住快捷键点击任意一段，只翻译这一段：原文会被圈出，译文卡片显示在它正下方，可换引擎、复制、存入笔记。再点一次同一段或点 ✕ 即可收起。修改快捷键后对新打开的文献立即生效。</html:div>
   </groupbox>
 
   <groupbox>
@@ -122,7 +122,7 @@
     <checkbox label="参考文献列表保留原文（避免排版挤压）" preference="extensions.zotero.clitrans.skipReferences"/>
     <checkbox label="翻译表格内文字（实验性）" preference="extensions.zotero.clitrans.translateTables"/>
     <checkbox label="逐段对照：含分式等复杂公式的段落让模型看图翻译，公式按 LaTeX 排版（GPT / Claude / Gemini，略多耗额度）" preference="extensions.zotero.clitrans.visionFormulas"/>
-    <html:div class="hint" style="margin-left:0">用法：在文库里右键条目 →「智译：整篇翻译」→ 选择引擎；排版在「智译：排版」或阅读器工具栏的「排版」按钮里切换，已翻译过的文献换排版不会重新翻译。GPT / Claude / Gemini 会把几十个段落合并成一次调用。「逐段对照」直接从原 PDF 裁切原文，每段下方紧接译文，公式和图表原样保留，图中文字（含图片里的文字，macOS 用系统文字识别，Windows 用 RapidOCR）会翻译后叠加在图的副本上；同一段落再次生成时走本地缓存，不重复消耗额度。左右对照、交替页、仅译文也用同一套处理：原文页面保持原样，译文按页排在旁边或后面，公式和图表处理与逐段对照一致。运行环境用本页顶部的「一键配置翻译环境」安装。</html:div>
+    <html:div class="hint" style="margin-left:0">用法：在文库里右键条目 →「Verso：整篇翻译」→ 选择引擎；排版在「Verso：排版」或阅读器工具栏的「排版」按钮里切换，已翻译过的文献换排版不会重新翻译。GPT / Claude / Gemini 会把几十个段落合并成一次调用。「逐段对照」直接从原 PDF 裁切原文，每段下方紧接译文，公式和图表原样保留，图中文字（含图片里的文字，macOS 用系统文字识别，Windows 用 RapidOCR）会翻译后叠加在图的副本上；同一段落再次生成时走本地缓存，不重复消耗额度。左右对照、交替页、仅译文也用同一套处理：原文页面保持原样，译文按页排在旁边或后面，公式和图表处理与逐段对照一致。运行环境用本页顶部的「一键配置翻译环境」安装。</html:div>
   </groupbox>
 
   <groupbox>

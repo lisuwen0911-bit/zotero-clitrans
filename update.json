@@ -4,7 +4,7 @@
       "updates": [
         {
           "version": "0.2.1",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.2.1.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.2.1.xpi",
           "update_hash": "sha256:7e7cd59773793996e45a3de3ff2ca61603067d492bb34fc70057a61a56f4b1fe",
           "applications": {
             "zotero": {
@@ -14,7 +14,7 @@
         },
         {
           "version": "0.4.8",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.4.8.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.4.8.xpi",
           "update_hash": "sha256:a97eaf4dbcdc59bf26c8d46a83d930dadc4d8d2f39cbeaddc0d001532c07d15d",
           "applications": {
             "zotero": {
@@ -24,7 +24,7 @@
         },
         {
           "version": "0.4.9",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.4.9.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.4.9.xpi",
           "update_hash": "sha256:b650dc8223f53cb199abdbc1452c1ff491f7cfad3c1589a575000e722b57fce2",
           "applications": {
             "zotero": {
@@ -34,7 +34,7 @@
         },
         {
           "version": "0.5.0",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.5.0.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.5.0.xpi",
           "update_hash": "sha256:2440780c21ac77325c5c311fc5c7bfd72a4e784f2f291419bc0da212f2df23b4",
           "applications": {
             "zotero": {
@@ -44,7 +44,7 @@
         },
         {
           "version": "0.5.1",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.5.1.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.5.1.xpi",
           "update_hash": "sha256:95ff02372d3d1b0b5ebba96b8ab336201df38a77c5a16b7f44d10fd466065f6e",
           "applications": {
             "zotero": {
@@ -54,7 +54,7 @@
         },
         {
           "version": "0.5.2",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.5.2.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.5.2.xpi",
           "update_hash": "sha256:78994bc0980d4bb0ce37e20259e83d91e83b4f68c6b068ae22128719c9010e28",
           "applications": {
             "zotero": {
@@ -64,8 +64,18 @@
         },
         {
           "version": "0.6.0",
-          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.6.0.xpi",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/clitranslate-0.6.0.xpi",
           "update_hash": "sha256:8c543c7f520db01ecb5225beca289081b415d75a2bc1d4344461cb9a2a4f6fb6",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999"
+            }
+          }
+        },
+        {
+          "version": "0.7.0",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/verso-0.7.0.xpi",
+          "update_hash": "sha256:b6ed196f0b9118c8b6a0bbfe4889b70104340c2312628c0764d6aff66885f015",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999"

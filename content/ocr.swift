@@ -1,4 +1,4 @@
-// 智译 CLI — tiny OCR helper using macOS Vision (no extra installs).
+// Verso — tiny OCR helper using macOS Vision (no extra installs).
 // Build: swiftc -O ocr.swift -o clitrans-ocr
 // Usage: clitrans-ocr <image.png> [<image.png> ...]
 // Prints one JSON object per image: {"file": ..., "lines": [{"text": ..., "box": [x0, y0, x1, y1], "conf": ...}]}

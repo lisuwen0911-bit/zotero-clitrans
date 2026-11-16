@@ -1,4 +1,4 @@
-# 智译 CLI — 逐段对照 (paragraph-interleaved bilingual PDF).
+# Verso — 逐段对照 (paragraph-interleaved bilingual PDF).
 #
 # The original is never re-typeset: every paragraph, figure, table and display formula is cropped
 # from the source PDF as vector content, and the Chinese translation is placed right below each

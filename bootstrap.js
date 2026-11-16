@@ -1,4 +1,4 @@
-/* 智译 CLI Translate — Zotero 7+ bootstrap */
+/* Verso (formerly 智译 CLI Translate) — Zotero 7+ bootstrap */
 var CLITrans, popupHandler, toolbarHandler, prefPaneID;
 const MENU_IDS = ["clitrans-sep", "clitrans-doc-translate", "clitrans-doc-layout"];
 
@@ -33,7 +33,8 @@ async function startup({ id, version, rootURI }) {
     pluginID: id,
     src: rootURI + "content/preferences.xhtml",
     scripts: [rootURI + "content/preferences.js"],
-    label: "智译 CLI",
+    label: "Verso",
+    image: rootURI + "content/icons/icon96.png",
   });
 
   for (const win of Zotero.getMainWindows()) addToWindow(win);
@@ -46,7 +47,7 @@ async function forSelected(window, fn) {
       await fn(item);
     } catch (err) {
       log(err);
-      Zotero.alert(window, "智译 CLI", String((err && err.message) || err));
+      Zotero.alert(window, "Verso", String((err && err.message) || err));
     }
   }
 }
@@ -58,10 +59,10 @@ function addToWindow(window) {
   const sep = doc.createXULElement("menuseparator");
   sep.id = "clitrans-sep";
 
-  // ---- 整篇翻译: pick an engine; uses the layout chosen under 「智译：排版」
+  // ---- 整篇翻译: pick an engine; uses the layout chosen under 「Verso：排版」
   const mi = doc.createXULElement("menu");
   mi.id = "clitrans-doc-translate";
-  mi.setAttribute("label", "智译：整篇翻译（保留排版）");
+  mi.setAttribute("label", "Verso：整篇翻译（保留排版）");
   const popup = doc.createXULElement("menupopup");
   popup.addEventListener("popupshowing", (ev) => {
     if (ev.target !== popup) return;
@@ -83,7 +84,7 @@ function addToWindow(window) {
   // ---- 排版: choose the default layout, or rebuild a layout from an existing translation
   const ml = doc.createXULElement("menu");
   ml.id = "clitrans-doc-layout";
-  ml.setAttribute("label", "智译：排版");
+  ml.setAttribute("label", "Verso：排版");
   const lpopup = doc.createXULElement("menupopup");
   lpopup.addEventListener("popupshowing", (ev) => {
     if (ev.target !== lpopup) return;

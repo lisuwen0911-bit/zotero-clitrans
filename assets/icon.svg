@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E6583F"/><stop offset="1" stop-color="#C23522"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <!-- two leaves of an open book meeting at the spine: recto + verso = V -->
+  <path d="M100 128h94l62 186v94h-22z" fill="#FFFDF8"/>
+  <path d="M412 128h-94l-62 186v94h22z" fill="#FFFDF8" fill-opacity=".58"/>
+</svg>

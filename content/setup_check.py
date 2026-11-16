@@ -1,4 +1,4 @@
-"""智译 CLI — check (and with --warmup, complete) the environment used by 整篇翻译.
+"""Verso — check (and with --warmup, complete) the environment used by 整篇翻译.
 
 Prints one line: "@@S {json}". Runs on macOS, Windows and Linux with the pdf2zh_next Python.
 """

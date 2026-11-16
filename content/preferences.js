@@ -1,4 +1,4 @@
-/* 智译 CLI — preference pane script (runs in the settings window) */
+/* Verso — preference pane script (runs in the settings window) */
 (function () {
   let tries = 0;
   function init() {

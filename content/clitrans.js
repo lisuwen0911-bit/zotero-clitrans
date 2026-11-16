@@ -1,4 +1,4 @@
-/* 智译 CLI Translate — core module.
+/* Verso (formerly Verso Translate) — core module.
  * Loaded by bootstrap.js via Services.scriptloader.loadSubScript into a scope
  * object; exposes createCLITrans(env). Everything that touches Zotero / the OS
  * goes through `env`, so the pure logic can be unit-tested outside Zotero.
@@ -101,14 +101,29 @@ function createCLITrans(env) {
     for (const chunk of chunkText(text, 4000)) {
       const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" +
         encodeURIComponent(tl) + "&dt=t";
-      const xhr = await Zotero.HTTP.request("POST", url, {
-        body: "q=" + encodeURIComponent(chunk),
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        responseType: "json",
-        timeout: 30000,
-      });
+      // Google answers a rate-limited network with a redirect to its "sorry" captcha page (HTTP 429).
+      // Zotero would retry that for a long time, which looked like "nothing happens": fail fast instead.
+      const blocked = () => new Error("Google 暂时拒绝了当前网络的请求（触发了人机验证）。过一会儿再试，或直接点 GPT / Claude / Gemini。");
+      let xhr;
+      try {
+        xhr = await Zotero.HTTP.request("POST", url, {
+          body: "q=" + encodeURIComponent(chunk),
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          responseType: "json",
+          timeout: 10000,
+          errorDelayIntervals: [],
+          errorDelayMax: 0,
+        });
+      } catch (e) {
+        const st = e && (e.status || (e.xmlhttp && e.xmlhttp.status));
+        const at = (e && e.xmlhttp && e.xmlhttp.responseURL) || "";
+        if (st === 429 || st === 403 || /\/sorry\//.test(at)) throw blocked();
+        if (/timed? ?out|timeout/i.test(String((e && e.message) || e))) throw new Error("Google 翻译超时（10 秒没有响应）。检查网络，或直接点 GPT / Claude / Gemini。");
+        throw e;
+      }
       let data = xhr.response;
-      if (typeof data === "string") data = JSON.parse(data);
+      if (typeof data === "string") { try { data = JSON.parse(data); } catch (e) { throw blocked(); } }
+      if (!Array.isArray(data)) throw blocked();
       parts.push(parseGoogleResponse(data));
     }
     return parts.join("");
@@ -916,49 +931,80 @@ function createCLITrans(env) {
   }
 
   // ------------------------------------------------- translate panel (shared UI)
-  function mkButton(doc, label, onClick) {
+  const UI = { ink: "#1C1B19", red: "#D8432E", teal: "#0F6E6E", tealSoft: "#E4F1EE", tealText: "#0B4A4A" };
+  const THEMES = {
+    dark: { fg: "#FFFFFF", sub: "rgba(255,255,255,.62)", line: "rgba(255,255,255,.26)", onBg: "#FFFFFF", onFg: UI.ink, accent: UI.red },
+    teal: { fg: UI.tealText, sub: "rgba(11,74,74,.66)", line: "rgba(15,110,110,.34)", onBg: UI.teal, onFg: "#FFFFFF", accent: UI.teal },
+  };
+  function anim(el, frames, opts) {
+    try { return el.animate(frames, opts); } catch (e) { return null; }
+  }
+  function mkPill(doc, label, onClick) {
     const b = doc.createElement("button");
     b.textContent = label;
     b.style.cssText =
-      "font-size:12px;padding:2px 8px;border-radius:5px;border:1px solid rgba(128,128,128,.45);" +
-      "background:transparent;color:inherit;cursor:pointer;";
+      "font:500 12px/1.4 system-ui,sans-serif;padding:3px 10px;border-radius:999px;border:1px solid transparent;" +
+      "background:transparent;color:inherit;cursor:pointer;white-space:nowrap;margin:0;min-width:0;" +
+      "appearance:none;-moz-appearance:none;";
     b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); onClick(b); });
     b.addEventListener("mousedown", (e) => e.stopPropagation());
     return b;
   }
-  /** Engine buttons + result + copy / save-to-note. Used by the selection popup and the paragraph box. */
-  function buildTranslatePanel(doc, { source, attachmentID, pageLabel, engine, auto, extraButtons }) {
+  /** Translation text + engine pills + copy / save-to-note. Used by the selection popup ("dark") and the
+   *  paragraph card ("teal"). */
+  function buildTranslatePanel(doc, { source, attachmentID, pageLabel, engine, auto, theme, onClose }) {
+    const T = THEMES[theme] || THEMES.dark;
     const root = doc.createElement("div");
-    root.style.cssText = "font-size:13px;line-height:1.5;color:inherit;";
-    const bar = doc.createElement("div");
-    bar.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:4px;";
+    root.style.cssText = "font-family:system-ui,sans-serif;text-align:left;color:" + T.fg + ";";
     const result = doc.createElement("div");
     result.style.cssText =
-      "max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;user-select:text;" +
-      "min-height:1.5em;";
-    const status = doc.createElement("div");
-    status.style.cssText = "font-size:11px;opacity:.65;margin-top:3px;";
-    const actions = doc.createElement("div");
-    actions.style.cssText = "display:flex;gap:4px;margin-top:4px;";
+      "font-size:14.5px;line-height:1.7;max-height:280px;overflow:auto;white-space:pre-wrap;" +
+      "word-break:break-word;user-select:text;-moz-user-select:text;cursor:text;";
+    const loader = doc.createElement("div");
+    loader.style.cssText = "display:none;padding:5px 0 3px;";
+    [100, 92, 58].forEach((wd, i) => {
+      const bar = doc.createElement("div");
+      bar.style.cssText = "height:9px;border-radius:5px;margin-bottom:8px;width:" + wd + "%;background:" + T.line + ";";
+      anim(bar, [{ opacity: 0.35 }, { opacity: 1 }, { opacity: 0.35 }], { duration: 1100, iterations: Infinity, delay: i * 160 });
+      loader.appendChild(bar);
+    });
+    const foot = doc.createElement("div");
+    foot.style.cssText = "display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:9px;";
+    const status = doc.createElement("span");
+    status.style.cssText = "font-size:11.5px;color:" + T.sub + ";margin-right:4px;white-space:nowrap;";
+    const acts = doc.createElement("div"); // status + actions wrap to the next line together
+    acts.style.cssText = "display:flex;gap:5px;align-items:center;margin-left:auto;";
 
     let current = { engine: null, text: "" };
     let runSeq = 0; // only the latest click may update the panel
     const engineBtns = {};
+    const paint = (eng) => {
+      for (const [k, b] of Object.entries(engineBtns)) {
+        const on = k === eng;
+        b.style.background = on ? T.onBg : "transparent";
+        b.style.color = on ? T.onFg : T.fg;
+        b.style.borderColor = on ? T.onBg : T.line;
+      }
+    };
     const run = async (eng) => {
       const seq = ++runSeq;
-      for (const [k, b] of Object.entries(engineBtns)) b.style.fontWeight = k === eng ? "700" : "400";
+      paint(eng);
       result.textContent = "";
-      status.textContent = engineLabel(eng) + " 翻译中…" + (ENGINES[eng].cli ? "（CLI 启动需几秒）" : "");
+      loader.style.display = "block";
+      status.textContent = engineLabel(eng) + " 翻译中…" + (ENGINES[eng].cli ? "约需几秒" : "");
       const t0 = Date.now();
       try {
         const text = await translate(source, eng);
         if (seq !== runSeq) return;
         const clean = String(text).replace(/<\/?(?:sup|sub|b|i|em|strong|span|p|br)\b[^>]*>/gi, "");
         current = { engine: eng, text: clean };
+        loader.style.display = "none";
         result.textContent = clean;
-        status.textContent = engineLabel(eng) + " · " + ((Date.now() - t0) / 1000).toFixed(1) + "s";
+        anim(result, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { duration: 240, easing: "ease-out" });
+        status.textContent = "Verso · " + engineLabel(eng) + " · " + ((Date.now() - t0) / 1000).toFixed(1) + "s";
       } catch (e) {
         if (seq !== runSeq) { LOG(e); return; }
+        loader.style.display = "none";
         status.textContent = "";
         result.textContent = "⚠️ " + (e && e.message ? e.message : e);
         LOG(e);
@@ -966,23 +1012,37 @@ function createCLITrans(env) {
     };
 
     for (const k of Object.keys(ENGINES)) {
-      engineBtns[k] = mkButton(doc, ENGINES[k].label, () => run(k));
-      bar.appendChild(engineBtns[k]);
+      engineBtns[k] = mkPill(doc, ENGINES[k].label, () => run(k));
+      foot.appendChild(engineBtns[k]);
     }
-    actions.appendChild(mkButton(doc, "复制", (b) => {
+    paint(null);
+    acts.appendChild(status);
+    const copy = mkPill(doc, "复制", (b) => {
       if (!current.text) return;
-      try { Zotero.Utilities.Internal.copyTextToClipboard(current.text); b.textContent = "已复制"; } catch (e) {}
-    }));
-    actions.appendChild(mkButton(doc, "存入笔记", async (b) => {
+      try { Zotero.Utilities.Internal.copyTextToClipboard(current.text); b.textContent = "已复制 ✓"; } catch (e) {}
+    });
+    copy.style.borderColor = T.line;
+    const save = mkPill(doc, "存入笔记", async (b) => {
       if (!current.text) return;
       try {
         await saveToNote({ attachmentID, source: cleanSelection(source), translation: current.text, engine: current.engine, pageLabel });
         b.textContent = "已存入 ✓";
+        anim(b, [{ transform: "scale(1)" }, { transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 320 });
       } catch (e) { b.textContent = "失败"; LOG(e); }
-    }));
-    for (const [label, fn] of extraButtons || []) actions.appendChild(mkButton(doc, label, fn));
+    });
+    save.style.background = T.accent;
+    save.style.borderColor = T.accent;
+    save.style.color = "#FFFFFF";
+    acts.append(copy, save);
+    foot.appendChild(acts);
+    if (onClose) {
+      const x = mkPill(doc, "✕", onClose);
+      x.title = "收起";
+      x.style.padding = "3px 7px";
+      acts.appendChild(x);
+    }
 
-    root.append(bar, result, status, actions);
+    root.append(result, loader, foot);
     if (auto) run(ENGINES[engine] ? engine : defaultEngine());
     return { root, run };
   }
@@ -994,12 +1054,13 @@ function createCLITrans(env) {
     if (!source || !source.trim()) return;
     const panel = buildTranslatePanel(doc, {
       source, attachmentID: reader.itemID, pageLabel: params.annotation.pageLabel,
-      engine: defaultEngine(), auto: !!pref("autoTranslate"),
+      engine: defaultEngine(), auto: !!pref("autoTranslate"), theme: "dark",
     });
     panel.root.style.cssText +=
-      "box-sizing:border-box;width:340px;max-width:340px;padding:6px 8px;margin-top:4px;" +
-      "border-top:1px solid rgba(128,128,128,.35);";
+      "box-sizing:border-box;width:360px;max-width:360px;padding:13px 15px 11px;margin:6px 0 2px;" +
+      "border-radius:12px;background:" + UI.ink + ";box-shadow:0 8px 22px rgba(0,0,0,.30);";
     append(panel.root);
+    anim(panel.root, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 200, easing: "ease-out" });
   }
 
   // ------------------------------------- paragraph translation (modifier key + click)
@@ -1099,41 +1160,78 @@ function createCLITrans(env) {
     const [px, py] = toPdf(ev.clientX - hr.left - host.clientLeft, ev.clientY - hr.top - host.clientTop);
     const page = pv._pdfPages && pv._pdfPages[idx];
     const para = findParagraph(page && page.chars, px, py);
-    if (!para || !cleanSelection(para.text)) return;
     const doc = w.document;
+    // The card lives in the scrolling viewer, not in the page: a page clips its children, which used to
+    // cut the card off for paragraphs near the bottom edge.
+    const layer = host.offsetParent || host.parentNode;
+    const toast = (msg) => {
+      const tip = doc.createElement("div");
+      tip.className = "clitrans-para-mark";
+      tip.textContent = msg;
+      tip.style.cssText = "position:absolute;z-index:9999;pointer-events:none;padding:5px 12px;border-radius:999px;" +
+        "font:500 12px system-ui,sans-serif;background:" + UI.ink + ";color:#fff;white-space:nowrap;" +
+        "left:" + (host.offsetLeft + ev.clientX - hr.left + 12) + "px;top:" + (host.offsetTop + ev.clientY - hr.top + 12) + "px;";
+      layer.append(tip);
+      env.setTimeout(() => { const a = anim(tip, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 }); env.setTimeout(() => tip.remove(), a ? 280 : 0); }, 1500);
+    };
+    if (!page || !page.chars) { toast("这一页的文字还在加载，稍后再试"); return; }
+    if (!para || !cleanSelection(para.text)) { toast("这里没有识别到段落文字"); return; }
     const id = "clitrans-para-" + idx + "-" + para.start;
     const old = doc.getElementById(id);
     if (old && old._clitransClose) { old._clitransClose(); return; } // click again to close
 
-    const p1 = toView(para.rect[0], para.rect[1]), p2 = toView(para.rect[2], para.rect[3]);
-    const left = Math.min(p1[0], p2[0]), right = Math.max(p1[0], p2[0]);
-    const top = Math.min(p1[1], p2[1]), bottom = Math.max(p1[1], p2[1]);
     const mark = doc.createElement("div");
     mark.className = "clitrans-para-mark";
-    mark.style.cssText = "position:absolute;pointer-events:none;z-index:9998;border-radius:3px;" +
-      "background:rgba(255,196,0,.18);left:" + left + "px;top:" + top + "px;width:" + (right - left) +
-      "px;height:" + (bottom - top) + "px;";
-    const width = Math.max(right - left, 300);
+    mark.style.cssText = "position:absolute;pointer-events:none;z-index:9998;border-radius:6px;" +
+      "outline:2px solid " + UI.teal + ";outline-offset:4px;background:rgba(15,110,110,.07);";
     const box = doc.createElement("div");
     box.id = id;
     box.className = "clitrans-para-box";
     box.style.cssText =
-      "position:absolute;z-index:9999;box-sizing:border-box;padding:6px 8px;border-radius:8px;" +
-      "background:Canvas;color:CanvasText;border:1px solid rgba(128,128,128,.5);" +
-      "box-shadow:0 4px 16px rgba(0,0,0,.25);font-family:system-ui,sans-serif;text-align:left;" +
-      "left:" + Math.max(4, Math.min(left, host.clientWidth - width - 4)) + "px;top:" + (bottom + 4) +
-      "px;width:" + width + "px;";
-    const close = () => { mark.remove(); box.remove(); };
+      "position:absolute;z-index:9999;box-sizing:border-box;padding:11px 14px 10px;border-radius:8px;" +
+      "background:" + UI.tealSoft + ";border-left:5px solid " + UI.teal + ";" +
+      "box-shadow:0 8px 24px rgba(0,0,0,.20);";
+    // positions follow the page: zooming resizes the page div, which re-runs place()
+    const place = () => {
+      const [a2, b2, c2, d2, e2, f2] = Array.from(view.viewport.transform, Number);
+      const tv = (x, y) => [a2 * x + c2 * y + e2, b2 * x + d2 * y + f2];
+      const p1 = tv(para.rect[0], para.rect[1]), p2 = tv(para.rect[2], para.rect[3]);
+      const ox = host.offsetLeft + host.clientLeft, oy = host.offsetTop + host.clientTop;
+      const left = Math.min(p1[0], p2[0]), right = Math.max(p1[0], p2[0]);
+      const top = Math.min(p1[1], p2[1]), bottom = Math.max(p1[1], p2[1]);
+      mark.style.left = ox + left + "px"; mark.style.top = oy + top + "px";
+      mark.style.width = right - left + "px"; mark.style.height = bottom - top + "px";
+      const width = Math.max(right - left + 8, 340);
+      box.style.width = width + "px";
+      box.style.left = ox + Math.max(4, Math.min(left - 4, host.clientWidth - width - 4)) + "px";
+      box.style.top = oy + bottom + 12 + "px";
+    };
+    // keep the card on screen with the smallest scroll, also when it grows once the translation arrives
+    const reveal = () => {
+      try {
+        const sc = doc.getElementById("viewerContainer") || layer;
+        const over = box.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom + 14;
+        if (over > 0) sc.scrollBy({ top: over, behavior: "smooth" });
+      } catch (e) {}
+    };
+    let ro = null;
+    const close = () => { try { ro && ro.disconnect(); } catch (e) {} mark.remove(); box.remove(); };
     box._clitransClose = close;
     for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "wheel"]) {
       box.addEventListener(type, (e) => e.stopPropagation());
     }
     const panel = buildTranslatePanel(doc, {
       source: para.text, attachmentID: reader.itemID, pageLabel: view.pageLabel || String(idx + 1),
-      engine: paraEngine(), auto: true, extraButtons: [["关闭", close]],
+      engine: paraEngine(), auto: true, theme: "teal", onClose: close,
     });
     box.append(panel.root);
-    host.append(mark, box);
+    place();
+    layer.append(mark, box);
+    try { ro = new w.ResizeObserver(() => { try { place(); reveal(); } catch (e) {} }); ro.observe(host); } catch (e) { LOG(e); }
+    anim(mark, [{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+    anim(box, [{ opacity: 0, transform: "translateY(-8px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "ease-out" });
+    try { ro.observe(box); } catch (e) {}
+    reveal();
   }
   const attachedWins = new Map(); // PDF iframe window -> listeners
   async function attachReader(reader) {
@@ -1188,7 +1286,7 @@ function createCLITrans(env) {
     const btn = doc.createElement("button");
     btn.className = "toolbar-button clitrans-layout-button";
     btn.textContent = "排版";
-    btn.title = "智译：切换双语排版方式";
+    btn.title = "Verso：切换双语排版方式";
     btn.style.cssText = "width:auto;padding:0 8px;font-size:12px;white-space:nowrap;";
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1228,7 +1326,7 @@ function createCLITrans(env) {
           await relayoutDocument(Zotero.Items.get(reader.itemID), win, k);
         } catch (err) {
           LOG(err);
-          Zotero.alert(win, "智译 CLI", String((err && err.message) || err));
+          Zotero.alert(win, "Verso", String((err && err.message) || err));
         }
       });
       menu.append(it);
@@ -1705,9 +1803,9 @@ function createCLITrans(env) {
   /** Python + runner script for a job directory, or a user-facing error. */
   async function prepareRunner(outDir) {
     const python = await findPython();
-    if (!python) throw new Error("整篇翻译的运行环境还没有安装。\n请打开 Zotero 设置 → 智译 CLI → 「一键配置翻译环境」，等它装完再试（只需一次，约 5–15 分钟）。");
+    if (!python) throw new Error("整篇翻译的运行环境还没有安装。\n请打开 Zotero 设置 → Verso → 「一键配置翻译环境」，等它装完再试（只需一次，约 5–15 分钟）。");
     const runner = await writeRunner(outDir);
-    if (!runner) throw new Error("无法从插件包中读取翻译脚本 p2z_runner.py（插件 " + (env.version || "") + "）。请重新安装智译插件后重试。");
+    if (!runner) throw new Error("无法从插件包中读取翻译脚本 p2z_runner.py（插件 " + (env.version || "") + "）。请重新安装 Verso 插件后重试。");
     return { python, runner, interleave: joinPath(outDir, "interleave.py") };
   }
   /** Run the runner, feeding its "@@P {json}" lines to onEvent. */
@@ -1978,7 +2076,7 @@ function createCLITrans(env) {
 
     log("\n== 4/4 下载中文字体与版面识别模型");
     const st = await checkPython(python, true, log);
-    log("\n" + formatEnvReport(st) + "\n\n全部完成，用时 " + fmtDuration(Date.now() - t0) + "。现在可以在条目右键菜单里使用「智译：整篇翻译」。");
+    log("\n" + formatEnvReport(st) + "\n\n全部完成，用时 " + fmtDuration(Date.now() - t0) + "。现在可以在条目右键菜单里使用「Verso：整篇翻译」。");
     return st;
   }
   function formatEnvReport(st) {
