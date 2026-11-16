@@ -703,7 +703,9 @@ function createCLITrans(env) {
       langName + ". Rules:\n" +
       "- Write EVERY mathematical expression (variables, sub/superscripts, fractions, equations, sets) in LaTeX " +
       "inside $...$, exactly as printed in the image, e.g. $V_i^{FG}=\\frac{\\beta_i}{16}\\left(\\alpha-\\frac{c}{\\beta_i}\\right)^2$. " +
-      "A displayed equation on its own line goes inside $$...$$.\n" +
+      "A displayed equation on its own line goes inside $$...$$ (with its number, e.g. $$x=y \\qquad (3)$$) and stays at the " +
+      "same place in the sentence as in the image: the translated words before it, then the equation, then the words after it " +
+      "(e.g. \"…，满足 $$…$$ 其中…\"). Never move an equation to the end or drop it.\n" +
       "- Use only standard math LaTeX (\\frac, ^, _, \\left( \\right), Greek letters, \\max, \\arg\\max, \\overset, \\mathbb, \\mathrm). No \\begin environments.\n" +
       "- Keep citations, numbers and labels such as (i), (ii), Lemma 2 unchanged. Translate only what is in the image.\n" +
       "- Plain text only: no Markdown (no *, **, #, bullet lists), no notes or explanations.\n" +

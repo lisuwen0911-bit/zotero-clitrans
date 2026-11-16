@@ -271,6 +271,9 @@ def order_regions(regs, page):
 
 
 # ------------------------------------------------------------------------- text + formulas
+DISPLAY = "\x00DISPLAY\x00"  # placeholder markup: a displayed equation inside a sentence (shown as a block)
+
+
 class Placeholders:
     def __init__(self):
         self.items = []  # (pno, rect, html)
@@ -603,6 +606,13 @@ def region_text(reg, body_size, ph):
         for t in f["toks"][1:]:
             rr |= t[1]
         markup, frac = linearize_ex(f["toks"], em)
+        bad = any(tok_key(t) in BAD_TOKS for t in f["toks"])
+        if bad and not frac:
+            # broken fonts also misreport glyph boxes: keep the crop on the formula's own text line
+            # (operators such as "=" report boxes twice the line height): use the normal-height glyphs
+            sane = [t[1] for t in f["toks"] if t[1].height <= 1.25 * em] or [t[1] for t in f["toks"]]
+            rr = R(rr.x0, max(rr.y0, min(r_.y0 for r_ in sane) - 0.03 * em), rr.x1,
+                   min(rr.y1, max(r_.y1 for r_ in sane) + 0.08 * em))
         # crops blank out every other glyph's box, then paint the formula's own glyph boxes back
         masks = [("x", R(t[1])) for t in toks if owned.get(id(t)) != k and t[1].intersects(rr)]
         # tall delimiters' boxes reach into the next row: restore only their middle
@@ -1197,6 +1207,8 @@ TEX_ALIASES = {  # LaTeX that models write but matplotlib's mathtext does not kn
 
 
 def tex_normalize(tex):
+    tex = re.sub(r"\\tag\*?\{([^{}]*)\}", r"\\qquad (\1)", tex)
+    tex = re.sub(r"\\(?:label|nonumber|notag)(?:\{[^{}]*\})?", "", tex)
     return re.sub(r"\\(!|[a-zA-Z]+)", lambda m: TEX_ALIASES.get(m.group(1), m.group(0)), tex)
 
 
@@ -1339,6 +1351,9 @@ def vision_html(tr, chunks, font_size):
         img = "<img src='%s' style='height:%.2fpt'/>" % (name, h)
         if display:
             out.append("</p><p style='text-align:center;line-height:%.1fpt'>%s</p><p>" % (h + 3, img))
+            rest = re.match(r"\s*[，,、；;。.]\s*", tr[pos:])
+            if rest:  # "…为 $$…$$，其中…": the comma ends the equation line
+                pos += rest.end()
         else:
             tall.append(h)
             out.append(img)
@@ -1360,15 +1375,25 @@ def translation_html(tr, ph_items, src, chunks, font_size, body_size):
     pieces = re.split(r"(\{\s*v\s*\d+\s*\})", tr)
     out = []
     tall = []
+    after_display = False
     for piece in pieces:
         m = re.fullmatch(r"\{\s*v\s*(\d+)\s*\}", piece)
         if not m:
+            if after_display:  # "满足 [equation] ，其中…": the comma belonged to the equation line
+                piece = re.sub(r"^\s*[，,、；;。.]\s*", "", piece)
+            after_display = False
             out.append(html.escape(piece).replace("\n", "<br/>"))
             continue
         it = known.get(int(m.group(1)))
         if not it:
             continue
         pno, rect, markup, masks = it
+        if markup == DISPLAY:
+            after_display = True
+            png = crop_png(src, pno, rect, zoom=5)
+            sc = font_size / max(body_size, 1)
+            out.append("</p>%s<p>" % slot_html(png, rect.width * sc, rect.height * sc, 10000))
+            continue
         if markup:
             out.append("<span class='m'>" + re.sub(r"\x00G:([^\x00]+)\x00", lambda g: glyph(pno, g, masks), markup) + "</span>")
         else:
@@ -1377,7 +1402,20 @@ def translation_html(tr, ph_items, src, chunks, font_size, body_size):
             h = max(4.0, (rect.height + 1.2) * font_size / max(body_size, 1))
             tall.append(h)
             out.append("<img src='%s' style='height:%.2fpt'/>" % (name, h))
-    return with_line_height("<p>" + "".join(out) + "</p>", tall, font_size)
+    return with_line_height(re.sub(r"<p>\s*</p>", "", "<p>" + "".join(out) + "</p>"), tall, font_size)
+
+
+def display_inline(u, results):
+    """Did this unit's translation put its in-sentence equations back in place?"""
+    disp = u.get("display") or []
+    if not disp:
+        return False
+    if u.get("vision") and results.get((u["vision"], "vision")):
+        t = results[(u["vision"], "vision")]
+        return len(re.findall(r"\$\$|\\\[", t)) >= len(disp)  # $$…$$ counts twice, \[ once
+    t = results.get((u["text"], "para")) or ""
+    names = [i for i, it in enumerate(u["ph"].items, 1) if it[2] == DISPLAY]
+    return all(re.search(r"\{\s*v\s*%d\s*\}" % i, t) for i in names)
 
 
 SLOT_IMAGES = {}  # slot id -> (png bytes, width pt, height pt)
@@ -1460,8 +1498,10 @@ def compose_pages(layout, src, pages, units, vinfo, results, body, out_path, tr)
             else:
                 kept += 1
             # equations / figures that sit inside this paragraph follow its translation
+            # (an equation already put back inside the translated sentence is not repeated)
+            inline = display_inline(u, results) if h else False
             for reg in u["parts"]:
-                if reg.label not in TEXT_LABELS:
+                if reg.label not in TEXT_LABELS and not (inline and reg in u.get("display", [])):
                     by_page[pno].append(visual_piece(reg))
             continue
         for reg in u["parts"]:
@@ -1601,7 +1641,15 @@ def main(argv):
     units = []  # dict(kind, parts=[Region], text, ph)
     pending = None
 
-    def ends_open(t):
+    def ends_open(t, ph=None):
+        # a footnote mark after the full stop ("… in Proposition 1.⁶") does not reopen the sentence
+        while ph is not None:
+            m = re.search(r"\{v(\d+)\}\s*$", t)
+            k = int(m.group(1)) - 1 if m else -1
+            mk = ph.items[k][2] if 0 <= k < len(ph.items) else None
+            if not (mk and re.fullmatch(r"(?:<sup>)?\s*\d{1,2}\s*(?:</sup>)?|[*†‡§¶]", mk.strip())):
+                break
+            t = t[:m.start()].rstrip()
         t = re.sub(r"\{v\d+\}\s*$", "x", t).rstrip()
         return bool(t) and t[-1] not in ".!?:;)\"”’]" and not re.search(r"\b(?:et al|i\.e|e\.g)\.$", t)
 
@@ -1637,10 +1685,16 @@ def main(argv):
                     reg.pno != last.pno or abs((reg.rect.x0 + reg.rect.x1) - (last.rect.x0 + last.rect.x1)) / 2 > 0.25 * src[reg.pno].rect.width)
                 cont = (
                     pending is not None and reg.label == "plain text" and last.label == "plain text"
-                    and ends_open(pending["text"]) and (text[:1].islower() or text.startswith("{v") or jumped)
+                    and ends_open(pending["text"], pending["ph"]) and (text[:1].islower() or text.startswith("{v") or jumped)
                     and len(pending["text"]) < 6000
                 )
                 if cont:
+                    # "… the threshold θt satisfies [equation] where …": the equation keeps its place
+                    # inside the sentence, so the translation can put it back at the same spot
+                    for v in between:
+                        if v.label == "isolate_formula":
+                            pending["text"] += " " + pending["ph"].add(v.pno, v.rect, DISPLAY)
+                            pending.setdefault("display", []).append(v)
                     off = len(pending["ph"].items)
                     text = re.sub(r"\{v(\d+)\}", lambda m: "{v%d}" % (int(m.group(1)) + off), text)
                     pending["ph"].items += ph.items
@@ -1656,7 +1710,7 @@ def main(argv):
                 units.append(pending)
             else:
                 # a figure or equation between two halves of a sentence must not break the sentence
-                if pending is not None and pending["parts"][-1].label == "plain text" and ends_open(pending["text"]) and len(between) < 3:
+                if pending is not None and pending["parts"][-1].label == "plain text" and ends_open(pending["text"], pending["ph"]) and len(between) < 3:
                     between.append(reg)
                 else:
                     flush_between()
@@ -1723,7 +1777,7 @@ def main(argv):
         # paragraphs with stacked formulas (fractions, multi-line) are read from their picture by the model (GPT / Claude / Gemini)
         if vision and any(it[2] is None for it in u["ph"].items):
             os.makedirs(vdir, exist_ok=True)
-            tparts = [p_ for p_ in u["parts"] if p_.label in TEXT_LABELS]
+            tparts = [p_ for p_ in u["parts"] if p_.label in TEXT_LABELS or p_ in u.get("display", [])]
             w = max(p_.rect.width for p_ in tparts)
             hsum = sum(p_.rect.height for p_ in tparts) + 4 * (len(tparts) - 1)
             tmp = pymupdf.open()
