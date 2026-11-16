@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Verso README art</title>
+<!-- Source of the README illustrations. Each .shot is rendered to assets/<id>.png (see assets/src/render.mjs). -->
+<style>
+:root{
+  --paper:#F4EFE6; --paper2:#EBE4D6; --ink:#1C1B19; --mute:#7A746A; --line:#D9D0BF;
+  --red:#D8432E; --teal:#0F6E6E; --tealsoft:#E4F1EE; --tealtext:#0B4A4A; --hl:#BFD4F2; --white:#FFFDF8;
+  --serif:"Songti SC","STSong","Noto Serif SC",serif;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#ccc;font-family:var(--sans);color:var(--ink);padding:40px;display:flex;flex-direction:column;gap:40px;width:1680px}
+.shot{width:1600px;background:var(--paper);border-radius:28px;position:relative;overflow:hidden;padding:72px 84px}
+.shot::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(900px 520px at 92% 115%,rgba(216,67,46,.11),transparent 60%),
+             radial-gradient(800px 480px at -4% -12%,rgba(15,110,110,.11),transparent 60%)}
+.shot>*{position:relative}
+.split{display:grid;grid-template-columns:560px 1fr;gap:72px;align-items:center}
+.tag{font-family:var(--mono);font-size:22px;letter-spacing:.12em;color:var(--red);display:flex;align-items:center;gap:16px}
+.tag::before{content:"";width:48px;height:4px;background:var(--red)}
+h2{font-family:var(--serif);font-weight:900;font-size:76px;line-height:1.18;margin-top:18px}
+h2 em{font-style:normal;color:var(--red)}
+.lead{font-size:27px;color:var(--mute);margin-top:20px;line-height:1.6}
+.pts{margin-top:34px;display:flex;flex-direction:column;gap:18px}
+.pt{display:flex;gap:16px;align-items:baseline;font-size:28px;font-weight:600}
+.pt b{font-family:var(--mono);font-size:19px;color:var(--teal);font-weight:500}
+kbd{font-family:var(--mono);font-size:26px;background:var(--white);border:2px solid var(--ink);border-bottom-width:5px;border-radius:10px;padding:6px 18px}
+
+.page{background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:0 30px 70px -30px rgba(60,40,10,.38);
+  padding:44px 50px;font-family:Georgia,"Times New Roman",serif;font-size:23px;line-height:1.62;color:#2b2925;position:relative}
+.page h4{font-size:27px;margin-bottom:14px}
+.page p{margin-bottom:16px;text-align:justify}
+.sel{background:var(--hl)}
+/* real UI: dark selection card */
+.dark{font-family:var(--sans);background:var(--ink);color:#fff;border-radius:14px;padding:20px 22px 16px;box-shadow:0 14px 34px rgba(0,0,0,.34);width:520px}
+.dark .txt{font-size:21px;line-height:1.7}
+.foot{display:flex;gap:7px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.pill{font:500 16px/1.4 var(--sans);padding:4px 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);white-space:nowrap}
+.dark .on{background:#fff;color:var(--ink);border-color:#fff}
+.dark .save,.tealcard .save{color:#fff}
+.dark .save{background:var(--red);border-color:var(--red)}
+.st{font-size:15px;color:rgba(255,255,255,.6);margin-left:auto;margin-right:4px}
+.popup{position:absolute;background:#fff;border:1px solid #d8d8d8;border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.22);padding:12px}
+.dots{display:flex;gap:16px;padding:4px 6px 12px}
+.dots i{width:18px;height:18px;border-radius:5px}
+/* real UI: paragraph card */
+.ring{outline:3px solid var(--teal);outline-offset:6px;border-radius:5px;background:rgba(15,110,110,.07)}
+.tealcard{font-family:var(--sans);background:var(--tealsoft);border-left:6px solid var(--teal);border-radius:9px;padding:16px 20px 14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.2);color:var(--tealtext);margin:14px -8px 18px}
+.tealcard .txt{font-size:20px;line-height:1.72}
+.tealcard .pill{border-color:rgba(15,110,110,.34)}
+.tealcard .on,.tealcard .save{background:var(--teal);border-color:var(--teal);color:#fff}
+.tealcard .st{color:rgba(11,74,74,.66)}
+.tealcard .foot{flex-wrap:nowrap;gap:6px}.tealcard .pill{font-size:14.5px;padding:3px 10px}.tealcard .st{font-size:13.5px}
+
+/* layouts */
+.layouts{display:grid;grid-template-columns:repeat(4,1fr);gap:36px;margin-top:44px}
+.lay{text-align:center}
+.mini{height:400px;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:24px 22px;position:relative;
+  box-shadow:0 24px 50px -28px rgba(60,40,10,.42);display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.mini.cols{flex-direction:row;gap:16px}.mini.cols>div{flex:1;display:flex;flex-direction:column;gap:10px}
+.bar{height:10px;border-radius:5px;background:#CFC8BA}.bar.t{background:var(--teal);opacity:.75}
+.bar.s{width:62%}.gap{height:6px}
+.cols .fx{font-size:14px;white-space:nowrap}
+.fx{font-family:Georgia,serif;font-style:italic;font-size:20px;text-align:center;color:#444;padding:3px 0}
+.fig{height:68px;border:2px dashed #CFC8BA;border-radius:6px;display:flex;align-items:flex-end;gap:8px;padding:8px 14px}
+.fig i{flex:1;background:var(--red);opacity:.7;border-radius:3px 3px 0 0}
+.stack{position:relative;height:400px}
+.stack .mini{position:absolute;width:86%;height:362px}
+.stack .mini:first-child{left:0;top:0}.stack .mini:last-child{right:0;bottom:0}
+.lay p{font-size:30px;font-weight:700;margin-top:22px}
+.lay span{font-size:21px;color:var(--mute)}
+.rec{display:inline-block;background:var(--red);color:#fff!important;font-size:17px!important;border-radius:999px;padding:2px 12px;margin-left:8px;vertical-align:middle;font-weight:500}
+.chips{display:flex;gap:16px;margin-top:36px;flex-wrap:wrap}
+.chip{font-size:23px;border:2px solid var(--ink);border-radius:999px;padding:8px 24px;background:var(--white)}
+
+/* engines */
+.engines{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;margin-top:44px}
+.eng{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:32px 30px;border-top:8px solid var(--teal)}
+.eng:first-child{border-top-color:var(--red)}
+.eng h3{font-family:var(--serif);font-size:52px;font-weight:900}
+.eng .via{font-family:var(--mono);font-size:20px;color:var(--teal);margin-top:10px}
+.eng:first-child .via{color:var(--red)}
+.eng p{font-size:23px;color:var(--mute);margin-top:16px;line-height:1.55}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;margin-top:44px}
+.tile{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:30px 28px;min-height:330px;display:flex;flex-direction:column}
+.tile h3{font-family:var(--serif);font-size:40px;font-weight:900}
+.tile p{font-size:21px;color:var(--mute);margin-top:10px;line-height:1.55}
+.tile .demo{margin-top:auto;padding-top:22px;font-family:var(--mono);font-size:17px;line-height:1.9;color:var(--ink)}
+.demo .k{color:var(--teal)}.demo .r{color:var(--red)}
+.demo .box{background:var(--paper);border-radius:10px;padding:12px 14px}
+
+/* setup */
+.setup{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:36px 40px}
+.bigbtn{display:inline-block;background:var(--ink);color:#fff;font-size:27px;font-weight:600;border-radius:12px;padding:14px 32px}
+.steps{margin-top:26px;display:flex;flex-direction:column;gap:15px;font-size:24px}
+.step{display:flex;align-items:center;gap:16px}
+.ck{width:32px;height:32px;border-radius:50%;background:var(--teal);display:grid;place-items:center;color:#fff;font-size:19px;font-weight:700;flex:none}
+.prog{height:9px;background:var(--teal);border-radius:6px;margin-top:26px}
+.done{margin-top:16px;font-size:22px;color:var(--teal);font-weight:600}
+
+/* banner */
+#banner{padding:84px 96px;display:grid;grid-template-columns:1fr 560px;gap:60px;align-items:center}
+.mark{width:104px;height:104px}
+.brand{font-family:var(--serif);font-weight:900;font-size:150px;line-height:1;margin-top:26px;letter-spacing:.01em}
+.brand small{font-family:var(--mono);font-weight:500;font-size:34px;color:var(--mute);margin-left:18px;letter-spacing:0}
+.slogan{font-family:var(--serif);font-weight:900;font-size:46px;line-height:1.4;margin-top:30px}
+.slogan em{font-style:normal;color:var(--red)}
+.bsub{font-size:25px;color:var(--mute);margin-top:18px;line-height:1.6}
+.book{display:grid;grid-template-columns:1fr 1fr;height:400px;filter:drop-shadow(0 30px 40px rgba(60,40,10,.3))}
+.leaf{background:var(--white);border:1px solid var(--line);padding:30px 26px;display:flex;flex-direction:column;gap:11px}
+.leaf.l{border-radius:10px 0 0 10px;transform:perspective(900px) rotateY(9deg);transform-origin:right}
+.leaf.r{border-radius:0 10px 10px 0;transform:perspective(900px) rotateY(-9deg);transform-origin:left;background:#FAFCFB}
+.leaf small{font-family:var(--mono);font-size:14px;letter-spacing:.14em;color:var(--mute);margin-bottom:6px}
+.leaf.r small{color:var(--teal)}
+</style>
+</head>
+<body>
+
+<section class="shot" id="banner">
+  <div>
+    <img class="mark" src="../icon.svg" alt="">
+    <div class="brand">Verso<small>for Zotero</small></div>
+    <div class="slogan">从一个词到一整篇，<br><em>在 Zotero 里把外文文献读透</em></div>
+    <div class="bsub">划词 · 段落 · 整篇三种翻译，公式、图表、排版原样保留，<br>用你已有的 GPT / Claude / Gemini 订阅。</div>
+  </div>
+  <div class="book" id="book"></div>
+</section>
+
+<section class="shot" id="feat-selection">
+  <div class="split">
+    <div>
+      <div class="tag">01 · 划词翻译</div>
+      <h2>选中，<br><em>译文就出来</em></h2>
+      <div class="lead">不离开阅读器，不用复制粘贴。</div>
+      <div class="pts">
+        <div class="pt"><b>01</b><div>选区弹窗里直接显示译文</div></div>
+        <div class="pt"><b>02</b><div>一键换引擎、复制</div></div>
+        <div class="pt"><b>03</b><div>原文 + 译文存入条目笔记</div></div>
+      </div>
+    </div>
+    <div class="page" style="padding-bottom:250px">
+      <h4>1. Introduction</h4>
+      <p>Recent disruptions have exposed how fragile global networks can be. <span class="sel">Supply chain resilience depends on how quickly firms share disruption signals with their partners.</span> Yet most firms still rely on delayed, manual reporting.</p>
+      <p>We study when information sharing improves recovery, and when it does not.</p>
+      <div class="popup" style="left:150px;top:236px">
+        <div class="dots"><i style="background:#F6D04D"></i><i style="background:#EE6A6A"></i><i style="background:#6DB33F"></i><i style="background:#4AA3E0"></i><i style="background:#9B8AE0"></i><i style="background:#D878E0"></i><i style="background:#E89B3C"></i><i style="background:#AAA"></i></div>
+        <div class="dark">
+          <div class="txt">供应链韧性取决于企业向合作伙伴共享中断信号的速度。</div>
+          <div class="foot"><span class="pill on">Google</span><span class="pill">GPT</span><span class="pill">Claude</span><span class="pill">Gemini</span></div>
+          <div class="foot" style="margin-top:9px"><span class="st">Verso · Google · 0.4s</span><span class="pill">复制</span><span class="pill save">存入笔记</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="feat-paragraph">
+  <div class="split">
+    <div>
+      <div class="tag">02 · 段落翻译</div>
+      <h2>只想看懂<br><em>这一段</em></h2>
+      <div class="lead" style="display:flex;align-items:center;gap:14px"><kbd>Alt</kbd> / <kbd>⌥</kbd> ＋ 点击任意段落</div>
+      <div class="pts">
+        <div class="pt"><b>01</b><div>自动识别段落边界并圈出原文</div></div>
+        <div class="pt"><b>02</b><div>译文卡片紧跟在原文下方</div></div>
+        <div class="pt"><b>03</b><div>可同时展开多段，再点一次收起</div></div>
+      </div>
+    </div>
+    <div class="page">
+      <p>Recent disruptions have exposed how fragile global networks can be, and how unevenly the costs are distributed.</p>
+      <p class="ring" style="margin-bottom:0">Firms that share early warning signals recover faster, but only when their partners can act on the information in time.</p>
+      <div class="tealcard">
+        <div class="txt">较早共享预警信号的企业恢复得更快，但前提是其合作伙伴能够及时据此采取行动。</div>
+        <div class="foot"><span class="pill">Google</span><span class="pill on">GPT</span><span class="pill">Claude</span><span class="pill">Gemini</span>
+          <span class="st">Verso · GPT · 6.0s</span><span class="pill">复制</span><span class="pill save">存入笔记</span><span class="pill" style="padding:4px 9px">✕</span></div>
+      </div>
+      <p>We formalize this trade-off in a two-tier model with demand uncertainty.</p>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="feat-document">
+  <div class="tag">03 · 整篇翻译</div>
+  <h2>整篇翻完，<em>排版原样保留</em></h2>
+  <div class="lead">右键条目一键生成双语 PDF，挂在条目下。四种排版随时切换，不重新翻译。</div>
+  <div class="layouts" id="layouts"></div>
+  <div class="chips">
+    <span class="chip">公式用 LaTeX 重新排版</span><span class="chip">图表里的文字也翻译</span>
+    <span class="chip">AI 引擎看图识别复杂公式</span><span class="chip">可跳过参考文献</span>
+  </div>
+</section>
+
+<section class="shot" id="feat-engines">
+  <div class="tag">04 · 翻译引擎</div>
+  <h2>用你<em>已有的订阅</em>，不用 API Key</h2>
+  <div class="lead">调用本机已登录的命令行工具，额度走你自己的账号。划词、段落、整篇可以各用各的引擎。</div>
+  <div class="engines">
+    <div class="eng"><h3>Google</h3><div class="via">免费</div><p>装好即用，零配置，<br>速度最快</p></div>
+    <div class="eng"><h3>GPT</h3><div class="via">via Codex CLI</div><p>走 ChatGPT 订阅，<br>可选模型与推理强度</p></div>
+    <div class="eng"><h3>Claude</h3><div class="via">via Claude Code</div><p>走 Claude 订阅，<br>看图识别公式</p></div>
+    <div class="eng"><h3>Gemini</h3><div class="via">via Antigravity / API</div><p>命令行或 API Key<br>二选一</p></div>
+  </div>
+</section>
+
+<section class="shot" id="feat-more">
+  <div class="tag">05 · 不止翻译</div>
+  <h2>把译文<em>留下来、用起来</em></h2>
+  <div class="tiles">
+    <div class="tile"><h3>术语表</h3><p>专业词汇的译法全文一致，对所有引擎生效。</p>
+      <div class="demo"><div class="box">tokenization<span class="k"> = </span>代币化<br>factoring<span class="k"> = </span>保理</div></div></div>
+    <div class="tile"><h3>翻译缓存</h3><p>换排版、重新生成、中断重跑，都只翻没翻过的段落。</p>
+      <div class="demo"><div class="box"><span class="k">126</span> 段命中缓存<br><span class="r">0</span> 段重新翻译</div></div></div>
+    <div class="tile"><h3>存入笔记</h3><p>原文、译文、引擎和页码，追加到条目下的同一篇笔记。</p>
+      <div class="demo"><div class="box">❝ Supply chain…<br>供应链韧性… <span class="k">— p.4</span></div></div></div>
+    <div class="tile"><h3>MCP 接口</h3><p>让 Claude / Codex 直接检索和阅读你的 Zotero 文献库。</p>
+      <div class="demo"><div class="box"><span class="k">127.0.0.1</span>/clitrans/mcp<br>仅本机 · 令牌保护</div></div></div>
+  </div>
+</section>
+
+<section class="shot" id="feat-setup">
+  <div class="split" style="grid-template-columns:600px 1fr">
+    <div>
+      <div class="tag">06 · 上手</div>
+      <h2>环境，<br><em>一键配好</em></h2>
+      <div class="lead">整篇翻译需要的 Python、版面模型、字体、文字识别，点一次按钮全部装好。只需做一次。</div>
+      <div class="pts">
+        <div class="pt"><b>→</b><div>自带 Python，不影响现有环境</div></div>
+        <div class="pt"><b>→</b><div>支持国内镜像，失败可续装</div></div>
+      </div>
+    </div>
+    <div class="setup">
+      <span class="bigbtn">一键配置翻译环境</span>
+      <div class="steps">
+        <div class="step"><span class="ck">✓</span>安装 uv（Python 包管理器）</div>
+        <div class="step"><span class="ck">✓</span>安装 pdf2zh_next / BabelDOC</div>
+        <div class="step"><span class="ck">✓</span>公式排版 · 模糊匹配 · 文字识别</div>
+        <div class="step"><span class="ck">✓</span>中文字体 · 版面识别模型</div>
+      </div>
+      <div class="prog"></div>
+      <div class="done">全部完成 · 现在可以在条目右键菜单里使用整篇翻译</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const B=(n,t)=>Array.from({length:n},(_,i)=>`<div class="bar ${t?'t':''} ${i==n-1?'s':''}"></div>`).join('');
+const FX='<div class="fx">π = (p − c)·D(θ)</div>', FIG='<div class="fig"><i style="height:40%"></i><i style="height:75%"></i><i style="height:55%"></i><i style="height:95%"></i></div>', G='<div class="gap"></div>';
+const L=[
+ ['逐段对照','每段原文下紧接译文',`<div class="mini">${B(3)}${B(3,1)}${G}${FX}${G}${B(3)}${B(3,1)}${G}${FIG}${B(2)}${B(2,1)}</div>`,1],
+ ['左右对照','左原文 · 右译文',`<div class="mini cols"><div>${B(5)}${G}${FX}${G}${B(4)}${FIG}${B(3)}</div><div>${B(5,1)}${G}${FX}${G}${B(4,1)}${FIG}${B(3,1)}</div></div>`],
+ ['交替页','一页原文 · 一页译文',`<div class="stack"><div class="mini">${B(5)}${G}${FX}${G}${B(4)}${FIG}</div><div class="mini">${B(5,1)}${G}${FX}${G}${B(4,1)}${FIG}</div></div>`],
+ ['仅译文','干净的中文版',`<div class="mini">${B(5,1)}${G}${FX}${G}${B(5,1)}${G}${FIG}${B(4,1)}</div>`]
+];
+document.getElementById('layouts').innerHTML=L.map(l=>`<div class="lay">${l[2]}<p>${l[0]}${l[3]?'<span class="rec">推荐</span>':''}</p><span>${l[1]}</span></div>`).join('');
+document.getElementById('book').innerHTML=
+ `<div class="leaf l"><small>RECTO · 原文</small>${B(4)}${G}${FX}${G}${B(4)}${FIG}${B(3)}</div>`+
+ `<div class="leaf r"><small>VERSO · 译文</small>${B(4,1)}${G}${FX}${G}${B(4,1)}${FIG}${B(3,1)}</div>`;
+</script>
+</body>
+</html>
