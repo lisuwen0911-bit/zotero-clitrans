@@ -1,0 +1,131 @@
+<vbox id="clitrans-prefs" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:html="http://www.w3.org/1999/xhtml">
+  <html:style>
+    #clitrans-prefs .row { display:flex; align-items:center; gap:8px; margin:4px 0; }
+    #clitrans-prefs .row > .k { width:150px; flex-shrink:0; }
+    #clitrans-prefs input[type=text], #clitrans-prefs input[type=number] { flex:1; min-width:0; }
+    #clitrans-prefs .hint { font-size:12px; opacity:.7; margin:2px 0 6px 158px; }
+    #clitrans-prefs pre { white-space:pre-wrap; word-break:break-all; font-size:12px; padding:6px; border-radius:6px; background:rgba(128,128,128,.12); max-height:200px; overflow:auto; user-select:text; }
+    #clitrans-prefs textarea { width:100%; min-height:110px; font-family:monospace; font-size:12px; }
+    #clitrans-prefs h2 { font-size:14px; margin:10px 0 4px; }
+  </html:style>
+
+  <groupbox>
+    <label><html:h2>划词翻译</html:h2></label>
+    <html:div class="row"><html:span class="k">目标语言（Google 代码）</html:span>
+      <html:input type="text" preference="extensions.zotero.clitrans.targetLang"/></html:div>
+    <html:div class="row"><html:span class="k">目标语言（给大模型）</html:span>
+      <html:input type="text" preference="extensions.zotero.clitrans.targetLangName"/></html:div>
+    <html:div class="row"><html:span class="k">默认引擎</html:span>
+      <menulist preference="extensions.zotero.clitrans.defaultEngine"><menupopup>
+        <menuitem label="Google（免费）" value="google"/><menuitem label="GPT · Codex CLI" value="codex"/><menuitem label="Claude · Claude Code CLI" value="claude"/><menuitem label="Gemini" value="gemini"/>
+      </menupopup></menulist></html:div>
+    <checkbox label="选中文字后自动用默认引擎翻译（建议默认引擎设为免费引擎）" preference="extensions.zotero.clitrans.autoTranslate"/>
+    <html:div class="row"><html:span class="k">笔记标题</html:span>
+      <html:input type="text" preference="extensions.zotero.clitrans.noteTitle"/></html:div>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>段落翻译（按住快捷键点击段落）</html:h2></label>
+    <html:div class="row"><html:span class="k">快捷键</html:span>
+      <menulist preference="extensions.zotero.clitrans.paraModifier"><menupopup>
+        <menuitem label="⌥ Option / Alt + 点击（推荐）" value="alt"/><menuitem label="⌃ Control + 点击" value="ctrl"/><menuitem label="⌘ Command / Win + 点击" value="meta"/><menuitem label="⇧ Shift + 点击" value="shift"/><menuitem label="关闭" value="off"/>
+      </menupopup></menulist></html:div>
+    <html:div class="row"><html:span class="k">段落翻译引擎</html:span>
+      <menulist preference="extensions.zotero.clitrans.paraEngine"><menupopup>
+        <menuitem label="跟随默认引擎" value=""/><menuitem label="Google（免费）" value="google"/><menuitem label="GPT · Codex CLI" value="codex"/><menuitem label="Claude · Claude Code CLI" value="claude"/><menuitem label="Gemini" value="gemini"/>
+      </menupopup></menulist></html:div>
+    <html:div class="hint" style="margin-left:0">在 PDF 阅读器里按住快捷键点击任意一段，只翻译这一段：原文高亮，译文显示在它正下方，可换引擎、复制、存入笔记。再点一次同一段即可收起。修改快捷键后对新打开的文献立即生效。</html:div>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>GPT / Claude：本机 CLI（无需 API Key）</html:h2></label>
+    <html:div class="row"><html:span class="k">Codex CLI 路径</html:span>
+      <html:input type="text" placeholder="留空自动检测" preference="extensions.zotero.clitrans.codexPath"/></html:div>
+    <html:div class="row"><html:span class="k">GPT 模型</html:span>
+      <menulist id="clitrans-codex-model" editable="true" preference="extensions.zotero.clitrans.codexModel" style="flex:1"><menupopup id="clitrans-codex-model-popup">
+        <menuitem label="gpt-6-luna" value="gpt-6-luna" description="快速、省额度（推荐翻译用）"/>
+        <menuitem label="gpt-5.6-luna" value="gpt-5.6-luna"/>
+        <menuitem label="gpt-6.1-terra" value="gpt-6.1-terra"/>
+        <menuitem label="gpt-6.1-sol" value="gpt-6.1-sol" description="能力强、耗额度多"/>
+      </menupopup></menulist>
+      <button id="clitrans-codex-models" label="读取我的模型"/></html:div>
+    <html:div class="hint">翻译属于轻量任务，推荐 gpt-6-luna（Codex 描述为"快速、经济、适合简单任务"）。点「读取我的模型」列出你账号可用的全部模型。</html:div>
+    <html:div class="row"><html:span class="k">GPT 推理强度</html:span>
+      <menulist editable="true" preference="extensions.zotero.clitrans.codexEffort"><menupopup>
+        <menuitem label="low（推荐，最快）" value="low"/><menuitem label="medium" value="medium"/><menuitem label="high" value="high"/>
+      </menupopup></menulist></html:div>
+    <checkbox label="Codex 精简模式（不加载 ~/.codex/config.toml：跳过 hooks、MCP，更快更省额度）" preference="extensions.zotero.clitrans.codexLite"/>
+    <html:div class="row"><html:span class="k">Claude Code 路径</html:span>
+      <html:input type="text" placeholder="留空自动检测" preference="extensions.zotero.clitrans.claudePath"/></html:div>
+    <html:div class="row"><html:span class="k">Claude 模型</html:span>
+      <menulist editable="true" preference="extensions.zotero.clitrans.claudeModel" style="flex:1"><menupopup>
+        <menuitem label="haiku（最快、最省额度，推荐翻译用）" value="haiku"/>
+        <menuitem label="sonnet（质量更好）" value="sonnet"/>
+        <menuitem label="opus（最强、最耗额度）" value="opus"/>
+      </menupopup></menulist></html:div>
+    <html:div class="row"><html:span class="k">单次超时（秒）</html:span>
+      <html:input type="number" preference="extensions.zotero.clitrans.cliTimeoutSec"/></html:div>
+    <html:div class="row"><html:span class="k">最多同时运行 CLI</html:span>
+      <html:input type="number" preference="extensions.zotero.clitrans.maxParallelCli"/></html:div>
+    <html:h2>Gemini</html:h2>
+    <html:div class="hint" style="margin-left:0">默认用本机已登录的 Antigravity 命令行（agy，随 Antigravity 安装），不需要 API Key；填了 API Key 则改走 Google 接口。</html:div>
+    <html:div class="row"><html:span class="k">Antigravity 模型</html:span>
+      <menulist editable="true" preference="extensions.zotero.clitrans.agyModel" style="flex:1"><menupopup>
+        <menuitem label="gemini-3.8-flash-low（最快、最省，推荐翻译用）" value="gemini-3.8-flash-low"/>
+        <menuitem label="gemini-3.8-flash-medium" value="gemini-3.8-flash-medium"/>
+        <menuitem label="gemini-3.8-flash-high（质量更好、更慢）" value="gemini-3.8-flash-high"/>
+      </menupopup></menulist></html:div>
+    <html:div class="row"><html:span class="k">agy 路径</html:span>
+      <html:input type="text" placeholder="留空自动检测（~/.local/bin/agy）" preference="extensions.zotero.clitrans.agyPath"/></html:div>
+    <html:div class="row"><html:span class="k">Gemini API Key</html:span>
+      <html:input type="password" placeholder="在 aistudio.google.com 申请；留空则改用本机 Gemini CLI" preference="extensions.zotero.clitrans.geminiApiKey"/></html:div>
+    <html:div class="row"><html:span class="k">Gemini 模型</html:span>
+      <menulist editable="true" preference="extensions.zotero.clitrans.geminiModel" style="flex:1"><menupopup>
+        <menuitem label="gemini-3.5-flash-lite（API Key 用，最快、最省）" value="gemini-3.5-flash-lite"/>
+        <menuitem label="gemini-3.8-flash（质量更好）" value="gemini-3.8-flash"/>
+        <menuitem label="gemini-2.5-flash-lite（旧版，仍可用）" value="gemini-2.5-flash-lite"/>
+      </menupopup></menulist></html:div>
+    <html:div class="row"><html:span class="k">Gemini CLI 路径</html:span>
+      <html:input type="text" placeholder="留空自动检测（仅在没填 API Key 时使用）" preference="extensions.zotero.clitrans.geminiPath"/></html:div>
+    <html:div class="hint">优先级：API Key ＞ Antigravity（agy）＞ Gemini CLI。API Key 以明文保存在 Zotero 配置里，只会发给 Google。</html:div>
+    <html:div class="row">
+      <button id="clitrans-test-google" label="测试 Google"/>
+      <button id="clitrans-test-codex" label="测试 GPT·Codex"/>
+      <button id="clitrans-test-claude" label="测试 Claude"/>
+      <button id="clitrans-test-gemini" label="测试 Gemini"/>
+      <button id="clitrans-detect" label="检测路径"/>
+    </html:div>
+    <html:pre id="clitrans-test-out">点击上方按钮测试连接。</html:pre>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>整篇翻译（保留排版）</html:h2></label>
+    <html:div class="row"><html:span class="k">pdf2zh_next 路径</html:span>
+      <html:input type="text" placeholder="留空自动检测" preference="extensions.zotero.clitrans.pdf2zhPath"/></html:div>
+    <html:div class="row"><html:span class="k">双语排版</html:span>
+      <menulist preference="extensions.zotero.clitrans.docLayout"><menupopup>
+        <menuitem label="逐段对照（每段原文下方紧接译文，推荐）" value="interleave"/><menuitem label="左右对照（左原文·右译文）" value="side"/><menuitem label="交替页（一页原文·一页译文）" value="alternate"/><menuitem label="仅译文" value="mono"/>
+      </menupopup></menulist></html:div>
+    <checkbox label="完成后自动打开生成的 PDF" preference="extensions.zotero.clitrans.openDualAfter"/>
+    <checkbox label="公式密集的段落保留原文（推导、证明等，避免上下标和公式错乱）" preference="extensions.zotero.clitrans.keepFormulaDense"/>
+    <checkbox label="参考文献列表保留原文（避免排版挤压）" preference="extensions.zotero.clitrans.skipReferences"/>
+    <checkbox label="翻译表格内文字（实验性）" preference="extensions.zotero.clitrans.translateTables"/>
+    <checkbox label="逐段对照：含分式等复杂公式的段落让 GPT 看图翻译，公式按 LaTeX 排版（仅 GPT 引擎，略多耗额度）" preference="extensions.zotero.clitrans.visionFormulas"/>
+    <html:div class="hint" style="margin-left:0">用法：在文库里右键条目 →「智译：整篇翻译」→ 选择引擎；排版在「智译：排版」或阅读器工具栏的「排版」按钮里切换，已翻译过的文献换排版不会重新翻译。GPT / Claude / Gemini 会把几十个段落合并成一次调用。「逐段对照」直接从原 PDF 裁切原文，每段下方紧接译文，公式和图表原样保留，图中文字（含图片里的文字，用系统自带的文字识别）会翻译后叠加在图的副本上；同一段落再次生成时走本地缓存，不重复消耗额度。左右对照、交替页、仅译文也用同一套处理：原文页面保持原样，译文按页排在旁边或后面，公式和图表处理与逐段对照一致。未安装 pdf2zh_next 时，在终端运行：uv tool install --python 3.12 pdf2zh_next</html:div>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>术语表 / 学科词典</html:h2></label>
+    <html:div class="hint" style="margin-left:0">每行一条：英文 = 中文。GPT、Claude、Gemini 会遵守；Google 不支持术语表。</html:div>
+    <html:textarea id="clitrans-glossary" placeholder="supply chain finance = 供应链金融&#10;bullwhip effect = 牛鞭效应&#10;reverse factoring = 反向保理"/>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>给 AI 开放文献库（MCP）</html:h2></label>
+    <checkbox label="启用只读文献库 MCP（检索、元数据、全文、笔记与批注、翻译）" preference="extensions.zotero.clitrans.mcpEnabled"/>
+    <html:div class="row"><html:span class="k">MCP 访问令牌（可选）</html:span>
+      <html:input type="text" placeholder="留空=本机免令牌" preference="extensions.zotero.clitrans.mcpToken"/></html:div>
+    <html:div class="hint" style="margin-left:0">在终端运行下面的命令，把文献库接入 Claude Code / Codex：</html:div>
+    <html:pre id="clitrans-mcp-cmds"></html:pre>
+  </groupbox>
+</vbox>
