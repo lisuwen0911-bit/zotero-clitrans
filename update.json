@@ -1,0 +1,28 @@
+{
+  "addons": {
+    "clitranslate@lisusu.local": {
+      "updates": [
+        {
+          "version": "0.2.1",
+          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.2.1.xpi",
+          "update_hash": "sha256:7e7cd59773793996e45a3de3ff2ca61603067d492bb34fc70057a61a56f4b1fe",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999"
+            }
+          }
+        },
+        {
+          "version": "0.4.8",
+          "update_link": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/clitranslate-0.4.8.xpi",
+          "update_hash": "sha256:a97eaf4dbcdc59bf26c8d46a83d930dadc4d8d2f39cbeaddc0d001532c07d15d",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

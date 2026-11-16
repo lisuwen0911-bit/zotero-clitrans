@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "智译 CLI Translate",
+  "version": "0.4.8",
+  "description": "划词/段落/整篇翻译：Google 免费引擎 + 本机已登录的 Codex(GPT)、Claude Code 与 Gemini。含术语表、存入笔记、多种双语排版 PDF、文献库 MCP。",
+  "author": "lisusu",
+  "applications": {
+    "zotero": {
+      "id": "clitranslate@lisusu.local",
+      "update_url": "https://raw.githubusercontent.com/lisuwen0911-bit/zotero-clitrans/main/update.json",
+      "strict_min_version": "6.999",
+      "strict_max_version": "11.*"
+    }
+  }
+}
