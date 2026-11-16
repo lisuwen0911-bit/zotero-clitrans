@@ -13,6 +13,7 @@ import html
 import io
 import json
 import os
+import collections
 import re
 import statistics
 import subprocess
@@ -376,15 +377,53 @@ def linearize(tokens, em, depth=0, frac_flag=None):
     return re.sub(r"\s*(=|≤|≥|≠|≈|∈|∉|⊂|⊆|≡|→|&lt;|&gt;)\s*", r" \1 ", out)
 
 
+TEXT_FONTS = set()  # fonts that carry the running text of this document: never "math" by name
+BROKEN_FONTS = set()  # math fonts whose text layer lies ("(" extracted as "b", ")" as "#"): use the picture
+BAD_TOKS = set()  # (x0, y0) of glyphs from BROKEN_FONTS (tokens get copied, so not by id)
+
+
+def tok_key(t):
+    return (round(t[1].x0, 2), round(t[1].y0, 2))
+BROKEN_MARK = re.compile(r'["#$&@`~\ufffd]')
+REAL_WORD = re.compile(r"(?<![A-Za-z])[A-Za-z]?[a-z]*[aeiouy][a-z]*(?![A-Za-z])")  # "Figure", "viewed"
+
+
+def real_words(t):
+    return [w for w in REAL_WORD.findall(t) if len(w) >= 4]
+
+
+STRICT_MATH_FONT = re.compile(r"CMMI|CMSY|CMEX|MSAM|MSBM|Math|Symbol|MTSY|MTMI|MTEX|STIX.*(?:Math|Sym)", re.I)
+
+
+def is_math_font(font):
+    font = font or ""
+    if not MATH_FONT.search(font):
+        return False
+    return bool(STRICT_MATH_FONT.search(font)) or font_family(font) not in TEXT_FONTS
+
+
+def font_family(font):
+    """'ABCDEF+AdvPSPAL-I' -> 'advpspal': the italic/bold cuts of a text font are text too."""
+    return re.split(r"[-,]", (font or "").split("+")[-1])[0].lower()
+
+
+# "Times-Italic", "PalatinoIt", Advent's "…TTd8ef4e6f.I" / "AdvPSPAL-I", "…-BI"
+ITALIC_NAME = re.compile(r"Italic|Oblique|[-.,_](?:I|It|BI|BoldIt|SemiboldIt)$|[a-z]It$")
+
+
 def span_is_math(span, body_size):
     t = "".join(c["c"] for c in span["chars"]).strip()
     if not t:
         return False
-    if MATH_FONT.search(span["font"] or ""):
+    if font_family(span["font"]) in BROKEN_FONTS:
         return True
+    if all(c in "’‘'\"“”,.;:!?–—-" for c in t.replace(" ", "")):
+        return False  # a lone apostrophe or comma, even in a math font (Elsevier sets ’ in STIX)
+    if is_math_font(span["font"]) and (STRICT_MATH_FONT.search(span["font"] or "") or not real_words(t)):
+        return True  # an ambiguous family (AdvP…, TT…) spelling a real word is a text font
     if len(t) <= 3 and any(is_math_char(c) for c in t):
         return True  # longer spans: only the math characters themselves count (per glyph)
-    italic = bool(span["flags"] & 2) or "Italic" in (span["font"] or "") or "Oblique" in (span["font"] or "")
+    italic = bool(span["flags"] & 2) or bool(ITALIC_NAME.search(span["font"] or ""))
     if italic and len(t) == 1 and t.isalpha() and t not in "aAI":
         return True  # single-letter variable in Times/Palatino-style papers
     if span["size"] < 0.78 * body_size and len(t) <= 4:
@@ -401,10 +440,13 @@ def line_tokens(ln, body_size):
     for s in ln["spans"]:
         m = span_is_math(s, body_size)
         f = s["font"] or ""
-        it = bool(s["flags"] & 2) or bool(re.search(r"Italic|Oblique|CMMI|MI\d|Math", f))
+        it = bool(s["flags"] & 2) or bool(ITALIC_NAME.search(f)) or bool(re.search(r"CMMI|MI\d|Math", f))
+        bad = font_family(f) in BROKEN_FONTS
         for c in s["chars"]:
             ch = c["c"]
             toks.append([ch, R(c["bbox"]), m or is_math_char(ch), s["size"], it])
+            if bad:
+                BAD_TOKS.add(tok_key(toks[-1]))
     n = len(toks)
     em = body_size
     for i in range(n):  # "1 − β", "(w, G)", "= 0" — only when they are really next to each other
@@ -564,7 +606,7 @@ def region_text(reg, body_size, ph):
         # tall delimiters' boxes reach into the next row: restore only their middle
         masks += [("k", R(t[1]) if t[3] <= 1.15 * em else R(t[1].x0, t[1].y0 + 0.12 * t[1].height, t[1].x1, t[1].y1 - 0.22 * t[1].height))
                   for t in f["toks"]]
-        if markup and not frac:
+        if markup and not frac and not any(tok_key(t) in BAD_TOKS for t in f["toks"]):
             names[k] = ph.add(reg.pno, rr, markup.strip(), masks)
         else:
             names[k] = ph.add(reg.pno, rr, None, masks)
@@ -833,6 +875,15 @@ def table_rows(lines):
                 k = n
         rows[k].append(b)
     rows = [r for r in rows if r]
+    # a group heading ("Absorptive capability") sits alone on the row's first line: a row of its own
+    split = []
+    for row in rows:
+        if len(row) > 1 and len(row[0][2]) == 1 and any(len(b[2]) > 1 for b in row[1:]) \
+                and re.search(r"[A-Za-z]{3,}", row[0][2][0][0]) and row[0][2][0][1].x0 < x_first + 1.5 * hmed:
+            split += [[row[0]], row[1:]]
+        else:
+            split.append(row)
+    rows = split
     out = []
     for row in rows:
         items = [it for b in row for it in b[2]]
@@ -904,7 +955,9 @@ def render_table_copy(src, pno, reg_rect, cells, results, ocr, dpi=230):
     if not ocr:
         for _, _, rs in todo:
             for r in rs:
-                pg.add_redact_annot(R(r) + (-0.2, -0.2, 0.2, 0.2))
+                # glyph boxes span the full font height and overlap the next line in tight tables:
+                # only the middle band, or the line below loses its text ("ASC1" under a heading)
+                pg.add_redact_annot(R(r.x0 - 0.2, r.y0 + 0.28 * r.height, r.x1 + 0.2, r.y1 - 0.28 * r.height))
         try:
             pg.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                                 text=pymupdf.PDF_REDACT_TEXT_REMOVE)
@@ -912,18 +965,27 @@ def render_table_copy(src, pno, reg_rect, cells, results, ocr, dpi=230):
             pass
     ch = Chunks(7)
     placed = []
+    # everything printed in the table (citations and numbers are not in `cells`) bounds the free space
+    own = {(round(x.x0, 1), round(x.y0, 1)) for _, _, rs in cells for x in rs}
+    boxes = [R(r) for _, r, _ in cells]
+    boxes += [R(w[:4]) for w in src[pno].get_text("words", clip=reg_rect) if (round(w[0], 1), round(w[1], 1)) not in own]
+    base = max(4.5, 0.82 * (statistics.median([x.height for _, _, rs in cells for x in rs]) or 7))
     for t, r, rs in todo:
         tr_ = results[(t, "label")]
         lh = statistics.median([x.height for x in rs]) or 7
-        box_w = max(r.width, 20)
-        box_h = max(r.height, lh) * 1.12
-        size = max(4.5, lh * 0.82)
+        # room for the Chinese: up to the next cell on the right / below (not just the English box)
+        right = min([o.x0 for o in boxes if o.x0 >= r.x1 - 0.5 and o.y0 < r.y1 and o.y1 > r.y0] + [reg_rect.x1])
+        below = min([o.y0 for o in boxes if o.y0 >= r.y1 - 0.5 and o.x0 < r.x1 and o.x1 > r.x0] + [reg_rect.y1])
+        box_w = max(r.width, 20, min(right - r.x0 - 3, r.width * 1.6))
+        box_h = max(max(r.height, lh) * 1.12, below - r.y0 - 1.5)
+        size = max(4.5, min(lh * 0.82, base * 1.15))
+        floor = max(4.5, base * 0.72)
         while True:
             st = ch.story("<p>%s</p>" % html.escape(tr_), "body{color:%s;font-size:%.2fpt;line-height:1.18}" % (TR_COLOR, size))
             more, _ = st.place(R(0, 0, box_w, box_h))
-            if not more or size <= 4.5:
+            if not more or size <= floor:
                 break
-            size *= 0.92
+            size = max(floor, size * 0.92)
         st = ch.story("<p>%s</p>" % html.escape(tr_), "body{color:%s;font-size:%.2fpt;line-height:1.18}" % (TR_COLOR, size))
         idx, _, filled = ch.draw(st, box_w, box_h)
         placed.append((r, idx, box_w, filled.y1))
@@ -1482,6 +1544,33 @@ def main(argv):
                         all_sizes += [round(s["size"], 1)] * len(s["chars"])
         per_page.append(order_regions(regs, page))
         emit({"p": 1 + 9 * (k + 1) / len(pages), "stage": "Analyze layout", "cur": k + 1, "tot": len(pages)})
+    # a font carrying a large share of the prose is a text font even if its name looks like a math
+    # family (Wiley/Advent "AdvPSPAL-R" is Palatino, not math): otherwise whole paragraphs become formulas
+    font_chars, font_words = collections.Counter(), collections.Counter()
+    for regs in per_page:
+        for r in regs:
+            for ln in r.lines:
+                for s in ln["spans"]:
+                    t = "".join(c["c"] for c in s["chars"])
+                    if r.label in TEXT_LABELS and sum(1 for c in t if c.isalpha()) >= 4:
+                        font_chars[font_family(s["font"])] += len(t)
+                    font_words[font_family(s["font"])] += len(real_words(t))
+    total_chars = sum(font_chars.values()) or 1
+    TEXT_FONTS.clear()
+    TEXT_FONTS.update(f for f, n in font_chars.items() if n >= 0.05 * total_chars)
+    TEXT_FONTS.update(f for f, n in font_words.items() if n >= 3)  # spells real words: a text font
+    font_marks = collections.Counter()
+    for regs in per_page:
+        for r in regs:
+            if r.label in TEXT_LABELS:
+                for ln in r.lines:
+                    for s in ln["spans"]:
+                        fam = font_family(s["font"])
+                        if fam not in TEXT_FONTS:
+                            font_marks[fam] += len(BROKEN_MARK.findall("".join(c["c"] for c in s["chars"])))
+    BROKEN_FONTS.clear()
+    BROKEN_FONTS.update(f for f, n in font_marks.items() if n >= 3)
+    BAD_TOKS.clear()
     if not all_sizes:
         emit({"error": "这个 PDF 没有可提取的文字（可能是扫描件），暂不支持逐段对照"})
         return 1
