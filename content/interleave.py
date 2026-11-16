@@ -1286,11 +1286,38 @@ def figure_items(info, results):
                 continue  # pure symbols/legend values ($\alpha_b = 0.25$) need no translation
             ka = label_key(re.sub(r"\$[^$]*\$", "", a))
             rects = []
-            if fuzz:
+            page, frect = info.get("page"), info.get("frect")
+            if page is not None and frect is not None:
+                # vector text: find exactly where this label is printed ("$w$" → "w")
+                plain = re.sub(r"\$([^$]*)\$", lambda m: re.sub(r"\\[A-Za-z]+|[{}^_\\]", "", m.group(1)), a)
+                plain = re.sub(r"\s+", " ", plain).strip()
+                try:
+                    hits = page.search_for(plain, clip=frect + (-2, -2, 2, 2)) if len(plain) >= 3 else []
+                except Exception:  # noqa: BLE001
+                    hits = []
+                if hits:
+                    rects = [R(hits[0])]
+            if not rects and fuzz and ka:
+                # single printed lines first: grouped labels merge neighbouring lines into one block
+                scored = []
+                for t, r in info.get("lines_raw", []):
+                    kt = label_key(t)
+                    if len(kt) >= 3 and min(len(ka), len(kt)) >= 0.3 * max(len(ka), len(kt)):
+                        scored.append((max(fuzz.ratio(ka, kt), 0.95 * fuzz.partial_ratio(ka, kt)), r))
+                best = max((sc for sc, _ in scored), default=0)
+                if best >= 82:
+                    rects = [r for sc, r in scored if sc >= best - 1][:4]
+            if not rects and fuzz and ka:
+                # the best-matching label only (and true repeats of it): "(1) Supplier: w" must not
+                # also claim "(1) Supplier: product delivery"
+                scored = []
                 for t, r, _ in labels:
                     kt = label_key(t)
-                    if ka and kt and fuzz.partial_ratio(ka, kt) >= 80 and min(len(ka), len(kt)) >= 0.5 * max(len(ka), len(kt)):
-                        rects.append(r)
+                    if kt and min(len(ka), len(kt)) >= 0.5 * max(len(ka), len(kt)):
+                        scored.append((max(fuzz.ratio(ka, kt), 0.97 * fuzz.partial_ratio(ka, kt)), r))
+                best = max((sc for sc, _ in scored), default=0)
+                if best >= 80:
+                    rects = [r for sc, r in scored if sc >= best - 2]
             items.append({"src": a, "tr": b, "rects": rects, "math": True})
     else:
         seen = {}
@@ -1431,12 +1458,13 @@ def slot_html(png, w, h, maxw):
 
 def stamp_chunk(page, cdoc, chunks, idx, tgt, clip):
     page.show_pdf_page(tgt, cdoc, idx, clip=clip)
+    sc = tgt.width / clip.width if clip.width else 1.0  # < 1 when a panel was shrunk to fit its page
     for sid, r in chunks.slots.get(idx, []):
         if sid in SLOT_IMAGES and r.y0 >= clip.y0 - 1 and r.y0 < clip.y1:
             png, w, h = SLOT_IMAGES[sid]
-            x = tgt.x0 + (r.x0 - clip.x0)
-            y = tgt.y0 + (r.y0 - clip.y0)
-            page.insert_image(R(x, y, x + w, y + h), stream=png)
+            x = tgt.x0 + (r.x0 - clip.x0) * sc
+            y = tgt.y0 + (r.y0 - clip.y0) * sc
+            page.insert_image(R(x, y, x + w * sc, y + h * sc), stream=png)
 
 
 def unit_html(u, results, src, chunks, body):
@@ -1512,13 +1540,31 @@ def compose_pages(layout, src, pages, units, vinfo, results, body, out_path, tr)
     for pno in pages:
         w, h = src[pno].rect.width, src[pno].rect.height
         head = "<p style='color:#999;font-size:6.5pt;text-align:right;margin:0 0 4pt 0'>— 原文第 %d 页 · 译文 —</p>" % (pno + 1)
-        story = chunks.story(head + ("".join(by_page[pno]) or "<p style='color:#999'>（本页无需翻译的正文）</p>"))
-        out = []
-        while True:
-            idx, more, filled = chunks.draw(story, w - 2 * 42, h - 2 * 40)
-            out.append((idx, filled.y1))
-            if not more:
-                break
+        body_html = head + ("".join(by_page[pno]) or "<p style='color:#999'>（本页无需翻译的正文）</p>")
+        W, H = w - 2 * 42, h - 2 * 40
+
+        def lay(scale):
+            # draw on a page 1/scale times larger, stamped back at `scale`: everything shrinks evenly
+            st = chunks.story(body_html)
+            res_ = []
+            while True:
+                idx, more, filled = chunks.draw(st, W / scale, H / scale)
+                res_.append((idx, filled.y1, scale))
+                if not more or len(res_) > 30:
+                    return res_
+
+        out = lay(1.0)
+        # a few lines over the page: shrink slightly (down to 78 %) rather than add a nearly empty page
+        if len(out) > 1 and out[-1][1] <= 0.45 * H:
+            target = len(out) - 1
+            need = (target * H) / (target * H + out[-1][1])
+            for scale in sorted({round(min(0.97, need * 0.99), 3), 0.93, 0.88, 0.83, 0.78}, reverse=True):
+                if scale > 0.97 or scale < 0.78:
+                    continue
+                trial = lay(scale)
+                if len(trial) <= target:
+                    out = trial
+                    break
         panels[pno] = out
     cdoc = chunks.close()
 
@@ -1527,9 +1573,9 @@ def compose_pages(layout, src, pages, units, vinfo, results, body, out_path, tr)
     for pno in pages:
         sp = src[pno]
         w, h = sp.rect.width, sp.rect.height
-        for n, (idx, hh) in enumerate(panels[pno]):
+        for n, (idx, hh, sc) in enumerate(panels[pno]):
             def stamp(page, x):
-                stamp_chunk(page, cdoc, chunks, idx, R(x + 42, 40, x + w - 42, 40 + hh), R(0, 0, w - 84, hh))
+                stamp_chunk(page, cdoc, chunks, idx, R(x + 42, 40, x + w - 42, 40 + hh * sc), R(0, 0, (w - 84) / sc, hh))
 
             def original(page, x):
                 page.show_pdf_page(R(x, 0, x + w, h), src, pno)
@@ -1537,10 +1583,9 @@ def compose_pages(layout, src, pages, units, vinfo, results, body, out_path, tr)
 
             if layout == "side":
                 page = res.new_page(width=2 * w, height=h)
-                if n == 0:
-                    original(page, 0)
-                else:
-                    page.insert_text((40, 60), "（续：原文第 %d 页的译文）" % (pno + 1), fontsize=8, color=(0.6, 0.6, 0.6), fontname="china-s")
+                original(page, 0)  # continued translation: the same original stays beside it
+                if n > 0:
+                    page.insert_text((w - 150, 14), "（原文第 %d 页 · 译文续）" % (pno + 1), fontsize=7, color=(0.6, 0.6, 0.6), fontname="china-s")
                 page.draw_line((w, 0), (w, h), color=(0.75, 0.75, 0.75), width=0.5)
                 stamp(page, w)
             elif layout == "alternate":
@@ -1722,10 +1767,12 @@ def main(argv):
     visual_regs = [p for u in units for p in u["parts"] if p.label not in TEXT_LABELS]
     for reg in visual_regs:
         u = vinfo.setdefault(id(reg), {"labels": [], "ocr": False})
+        u["page"], u["frect"] = src[reg.pno], R(reg.rect)  # where the figure's own text can be searched
         if reg.label == "isolate_formula":
             continue
         vec = [("".join(c["c"] for s in ln["spans"] for c in s["chars"]).strip(), ln["bbox"]) for ln in reg.lines]
         vec = [(t, r) for t, r in vec if t]
+        u["lines_raw"] = [(t, R(r)) for t, r in vec]
         garbled = any(GARBLED.search(t) for t, _ in vec)
         if reg.label == "figure" and sum(len(t) for t, _ in vec) >= 6 and garbled:
             # glyphs without Unicode (Greek letters in plot labels): read the picture instead
@@ -1753,6 +1800,8 @@ def main(argv):
                 x0, y0, x1, y1 = ln["box"]
                 lines.append((ln["text"].strip(), R(rr.x0 + x0 * rr.width, rr.y0 + y0 * rr.height, rr.x0 + x1 * rr.width, rr.y0 + y1 * rr.height)))
             ocr_labels = table_cells(lines) if u.get("is_table") else group_label_lines(lines)
+            if u.get("needs_vision") or not u.get("lines_raw"):
+                u["lines_raw"] = lines
             if not u.get("labels") or u.get("needs_vision"):
                 u["labels"] = ocr_labels
             u["table"] = bool(u.get("is_table"))
