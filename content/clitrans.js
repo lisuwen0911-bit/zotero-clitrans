@@ -1718,7 +1718,8 @@ function createCLITrans(env) {
   };
   function friendlyError(msg) {
     msg = String(msg || "");
-    if (/SSLError|CERTIFICATE|ConnectError|ProxyError/i.test(msg)) return "网络连接失败（" + msg.slice(0, 160) + "）。请确认代理/TUN 已开启。";
+    if (isProxyFailure(msg)) return "代理连接失败（" + msg.slice(0, 160) + "）。设置了代理但代理软件没有在运行：请打开它，或关闭系统代理后重启 Zotero。";
+    if (/SSLError|CERTIFICATE|ConnectError/i.test(msg)) return "网络连接失败（" + msg.slice(0, 160) + "）。请检查网络；如果使用代理 / VPN，请确认它在运行。";
     if (/401|invalid token/i.test(msg)) return "插件内部令牌不匹配，请重启 Zotero 后重试。";
     return msg.slice(-800);
   }
@@ -2004,7 +2005,38 @@ function createCLITrans(env) {
     }
     return e;
   }
+  // A proxy that is configured but not running (Clash / v2rayN / an accelerator was closed while the system
+  // proxy or HTTP(S)_PROXY stayed set) refuses every connection: uv says "tunnel error … os error 10061",
+  // Python says "ProxyError". Setup then retries the download without any proxy.
+  const PROXY_FAIL = new RegExp([
+    "tunnel error", "ProxyError", "proxy error", "Unable to connect to proxy", "Cannot connect to proxy",
+    "Tunnel connection failed", "os error 10061", "WinError 10061", "积极拒绝", "actively refused",
+    "Failed to connect to (127\\.0\\.0\\.1|localhost) port",
+    "\\[Errno (61|111)\\] Connection refused", // httpx (BabelDOC font / model download) on macOS / Linux
+  ].join("|"), "i");
+  function isProxyFailure(text) { return PROXY_FAIL.test(String(text || "")); }
+  // NO_PROXY=* also covers the Windows system proxy (registry) that uv / Python would otherwise pick up
+  const NO_PROXY_ENV = { NO_PROXY: "*", no_proxy: "*", HTTP_PROXY: "", HTTPS_PROXY: "", ALL_PROXY: "",
+    http_proxy: "", https_proxy: "", all_proxy: "" };
+  let bypassProxy = false; // true once a download only worked without the proxy; reset at every setup
+  const PROXY_DETECTED = "检测到代理连接失败：系统代理或环境变量里设置了代理，但对应的软件（如 Clash、v2rayN、加速器）没有在运行。改为不经代理、直接连接重试…";
+  const PROXY_HELP = "不经代理直接连接也失败了。\n· 如果你的网络必须走代理才能上网：请先打开代理软件，再重试；\n" +
+    "· 如果不需要代理：" + (IS_WIN ? "Windows 设置 → 网络和 Internet → 代理，关闭「使用代理服务器」" : "关闭系统设置里的网络代理") +
+    "，并删除环境变量 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY，然后重启 Zotero。";
+  function withNoProxy(opts) { return Object.assign({}, opts, { env: Object.assign({}, opts.env, NO_PROXY_ENV) }); }
+  /** One setup command; on a dead proxy it is retried once without any proxy (opts.directArgs replace args). */
   async function runStep(cmd, args, log, opts = {}) {
+    if (bypassProxy) return runStepOnce(cmd, opts.directArgs || args, log, withNoProxy(opts));
+    try { return await runStepOnce(cmd, args, log, opts); } catch (e) {
+      if (!isProxyFailure(e && e.message)) throw e;
+      log("\n" + PROXY_DETECTED);
+      bypassProxy = true;
+      try { return await runStepOnce(cmd, opts.directArgs || args, log, withNoProxy(opts)); } catch (e2) {
+        throw new Error(((e2 && e2.message) || e2) + "\n\n" + PROXY_HELP);
+      }
+    }
+  }
+  async function runStepOnce(cmd, args, log, opts = {}) {
     log("\n$ " + String(cmd).split(/[\\/]/).pop() + " " + args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
     let last = 0;
     const r = await runProcess(cmd, args, Object.assign({
@@ -2021,7 +2053,9 @@ function createCLITrans(env) {
   async function installUv(log) {
     if (IS_WIN) {
       const ps = joinPath(envVar("SystemRoot") || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-      await runStep(ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"], log);
+      const cmd = (direct) => ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        (direct ? "[System.Net.WebRequest]::DefaultWebProxy = $null; " : "") + "irm https://astral.sh/uv/install.ps1 | iex"];
+      await runStep(ps, cmd(false), log, { directArgs: cmd(true) });
     } else {
       await runStep("/bin/sh", ["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"], log);
     }
@@ -2037,18 +2071,26 @@ function createCLITrans(env) {
     const src = await readPackaged("content/setup_check.py");
     const script = joinPath(dir, "setup_check.py");
     await Zotero.File.putContentsAsync(script, src);
-    const r = await runProcess(python, [script].concat(warmup ? ["--warmup"] : []), {
-      workdir: dir, timeoutMs: (warmup ? 30 : 2) * 60 * 1000,
+    const run = (direct) => runProcess(python, [script].concat(warmup ? ["--warmup"] : []), {
+      workdir: dir, timeoutMs: (warmup ? 30 : 2) * 60 * 1000, env: direct ? NO_PROXY_ENV : undefined,
       onOutput: log ? (s) => { const l = String(s).trim().split("\n").pop(); if (l && !l.startsWith("@@S")) log(l.slice(0, 200)); } : undefined,
     });
-    const m = String(r.stdout).match(/^@@S (.+)$/m);
-    if (!m) throw new Error("环境检查失败：" + errText(r));
-    return JSON.parse(m[1]);
+    const parse = (r) => { const m = String(r.stdout).match(/^@@S (.+)$/m); return m ? JSON.parse(m[1]) : null; };
+    let r = await run(bypassProxy), st = parse(r);
+    if (warmup && !bypassProxy && isProxyFailure((st && st.asset_error) || errText(r))) {
+      if (log) log("\n" + PROXY_DETECTED);
+      bypassProxy = true;
+      r = await run(true); st = parse(r);
+      if (st && st.asset_error && isProxyFailure(st.asset_error)) st.asset_error += "\n" + PROXY_HELP;
+    }
+    if (!st) throw new Error("环境检查失败：" + errText(r));
+    return st;
   }
   /** Everything 整篇翻译 needs: uv → pdf2zh_next (Python 3.12) → extras → font + layout model. */
   async function setupEnvironment(log) {
     log = log || (() => {});
     const t0 = Date.now();
+    bypassProxy = false;
     log("== 1/4 安装工具 uv" + (pref("useMirror") ? "（使用国内镜像）" : ""));
     let uv = resolveTool("uv");
     if (uv) log("已安装：" + uv);
@@ -2076,6 +2118,7 @@ function createCLITrans(env) {
 
     log("\n== 4/4 下载中文字体与版面识别模型");
     const st = await checkPython(python, true, log);
+    if (bypassProxy) log("\n注意：本次配置绕过了一个没有在运行的代理。之后整篇翻译不受影响；如果不再使用该代理软件，建议关闭系统代理。");
     log("\n" + formatEnvReport(st) + "\n\n全部完成，用时 " + fmtDuration(Date.now() - t0) + "。现在可以在条目右键菜单里使用「Verso：整篇翻译」。");
     return st;
   }
@@ -2089,7 +2132,7 @@ function createCLITrans(env) {
       ok(!!st.ocr) + " 图片文字识别（" + (st.ocr === "vision" ? "macOS 系统 OCR" : st.ocr === "rapidocr" ? "RapidOCR" : "未安装") + "）",
       ok(st.font) + " 中文字体（思源宋体）",
       ok(st.model) + " 版面识别模型",
-    ].join("\n");
+    ].concat(st.asset_error && !(st.font && st.model) ? ["  原因：" + st.asset_error] : []).join("\n");
   }
   /** Status of everything, for the settings page. */
   async function checkEnvironment() {
@@ -2155,7 +2198,7 @@ function createCLITrans(env) {
       parseGoogleResponse, chunkText, buildCodexArgs, buildClaudeArgs, buildGeminiArgs, parseGeminiResponse,
       splitMessages, pickEngineFromModel, handleChatRequest, handleTranslateRequest, handleMcpRequest,
       parseBatchResult, batchSystemPrompt, parseVisionResult, visionPrompt, translateSegment, runBatch, mcpDispatch, pdf2zhArgs,
-      noteBlockHTML, runWithFlagFallback, headerValue, formatProgress, fmtDuration,
+      noteBlockHTML, runWithFlagFallback, isProxyFailure, friendlyError, headerValue, formatProgress, fmtDuration,
       normalizePlaceholders, placeholdersIntact, isFormulaDense, isReferenceLike, isFragment, segmentGuard,
       findParagraph, isTranslationTitle, engineFromTitle, docStats, docLayout,
       attached: () => [...attachedWins.keys()].map((w) => { try { return w.location.href.slice(0, 80); } catch (e) { return "?"; } }),

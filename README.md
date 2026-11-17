@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.7.0-D8432E">
+  <img alt="version" src="https://img.shields.io/badge/version-0.7.1-D8432E">
   <img alt="zotero" src="https://img.shields.io/badge/Zotero-7%20%E2%80%93%2010-0F6E6E">
   <img alt="platform" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-supported-1C1B19">
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
@@ -54,7 +54,7 @@
 
 ## 安装
 
-1. 在本仓库文件列表中点开最新的 [`verso-0.7.0.xpi`](verso-0.7.0.xpi)，再点 **Download raw file** 下载。
+1. 在本仓库文件列表中点开最新的 [`verso-0.7.1.xpi`](verso-0.7.1.xpi)，再点 **Download raw file** 下载。
    > 用 Firefox 下载时请右键链接选「另存为」，否则浏览器会尝试把它当作自己的扩展安装。
 2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**（Install Plugin From File…），选中刚下载的 `.xpi`。
 3. 安装完成后无需重启。以后有新版本，Zotero 会自动更新。
@@ -246,6 +246,11 @@ Google 的免费接口会对部分网络限流（返回人机验证页）。插�
 - 用命令行引擎（GPT / Claude）时需要等几秒，卡片上会有加载动画；
 - 检查设置里的段落翻译快捷键是否被改过或关闭。
 
+**一键配置报「tunnel error」「积极拒绝」「os error 10061」「ProxyError」？**
+这是电脑上设置了代理，但代理软件（Clash、v2rayN、加速器、抓包工具等）没有在运行：开过「系统代理」后把软件关了，Windows 里的代理设置还留着。0.7.1 起插件会自动识别，并改为不经代理直接连接重试，一般无需处理。如果直连也失败：
+- 网络必须走代理才能上网的，先打开代理软件再点「一键配置」；
+- 不需要代理的，在 Windows 设置 → 网络和 Internet → 代理中关闭「使用代理服务器」，并删除环境变量 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`，然后重启 Zotero。
+
 **一键配置失败 / 很慢？**
 保持勾选「使用国内镜像下载」后再试。如果卡在第 1 步（安装 uv），可以按 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/)手动安装，再回来点「一键配置」。也可以在终端里手动执行（Windows 用 PowerShell）：
 
@@ -281,7 +286,7 @@ uv tool install --python 3.12 pdf2zh_next
 
 Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图标：
 
-- 已安装旧版的，直接安装 `verso-0.7.0.xpi` 即可**覆盖升级**，不需要先卸载；
+- 已安装旧版的，直接安装最新的 `verso-0.7.x.xpi` 即可**覆盖升级**，不需要先卸载；
 - 所有设置、术语表、翻译缓存都会保留；
 - 设置页的名称从「智译 CLI」变为「Verso」，右键菜单从「智译：…」变为「Verso：…」；
 - 仓库地址从 `zotero-clitrans` 变为 `zotero-verso`，旧链接会自动跳转。
@@ -289,6 +294,10 @@ Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图
 ---
 
 ## 更新日志
+
+**0.7.1**
+- 一键配置遇到失效的代理（代理软件已关闭但系统代理仍开着）时，自动改为直接连接重试，覆盖 uv 安装、Python 组件安装、字体与版面模型下载；
+- 代理类报错给出针对性的处理办法，不再笼统提示「勾选国内镜像」。
 
 **0.7.0**
 - 更名为 **Verso**，新图标；

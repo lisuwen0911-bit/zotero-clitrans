@@ -76,8 +76,9 @@
         await api.setupEnvironment(log);
         log("\n" + await api.checkEnvironment());
       } catch (e) {
-        log("\n⚠️ 配置中断：" + ((e && e.message) || e) +
-          "\n可以再点一次「一键配置翻译环境」继续（已装好的部分会跳过）。网络慢时勾选「使用国内镜像」。");
+        const msg = String((e && e.message) || e);
+        log("\n⚠️ 配置中断：" + msg + "\n可以再点一次「一键配置翻译环境」继续（已装好的部分会跳过）。" +
+          (/代理/.test(msg) ? "" : "网络慢时勾选「使用国内镜像」。"));
       } finally { busy = false; btn.disabled = false; }
     });
     document.getElementById("clitrans-detect").addEventListener("command", () => {
