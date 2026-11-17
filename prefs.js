@@ -31,3 +31,6 @@ pref("extensions.zotero.clitrans.paraModifier", "alt");
 pref("extensions.zotero.clitrans.paraEngine", "");
 pref("extensions.zotero.clitrans.useMirror", true);
 pref("extensions.zotero.clitrans.pythonPath", "");
+pref("extensions.zotero.clitrans.autoCheckUpdate", true);
+pref("extensions.zotero.clitrans.lastUpdateCheck", "0");
+pref("extensions.zotero.clitrans.skipUpdateVersion", "");

@@ -2134,6 +2134,120 @@ function createCLITrans(env) {
       ok(st.model) + " 版面识别模型",
     ].concat(st.asset_error && !(st.font && st.model) ? ["  原因：" + st.asset_error] : []).join("\n");
   }
+  // ------------------------------------------------------------ self-update
+  // Zotero itself reads update.json about once a day, but raw.githubusercontent.com is often unreachable
+  // from mainland China, so updates silently never arrive. 「检查更新」 and the daily background check
+  // read the same update.json from GitHub first and jsDelivr (a CDN mirror of the repo) second, and
+  // install the new .xpi in place: settings, glossary and translation cache are kept, no reinstall.
+  const REPO = "zhouhuai09110v0/zotero-verso";
+  const UPDATE_SOURCES = [
+    { name: "GitHub", base: "https://raw.githubusercontent.com/" + REPO + "/main/" },
+    { name: "jsDelivr", base: "https://cdn.jsdelivr.net/gh/" + REPO + "@main/" },
+  ];
+  const RELEASE_NOTES_URL = "https://github.com/" + REPO + "#更新日志";
+  /** Pure: compares dotted versions ("0.7.10" > "0.7.9"); negative when a < b. */
+  function cmpVersion(a, b) {
+    const pa = String(a || "0").split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+    const pb = String(b || "0").split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d) return d < 0 ? -1 : 1;
+    }
+    return 0;
+  }
+  /** Pure: the newest entry of an update.json "updates" list. */
+  function latestUpdate(list) {
+    return (Array.isArray(list) ? list : []).filter((u) => u && u.version)
+      .sort((x, y) => cmpVersion(y.version, x.version))[0] || null;
+  }
+  async function fetchUpdateManifest(sources = UPDATE_SOURCES) {
+    const errors = [];
+    for (const src of sources) {
+      try {
+        const xhr = await Zotero.HTTP.request("GET", src.base + "update.json?t=" + Date.now(), {
+          responseType: "json", timeout: 12000, errorDelayIntervals: [], errorDelayMax: 0,
+          headers: { "Cache-Control": "no-cache" },
+        });
+        let d = xhr.response;
+        if (typeof d === "string") d = JSON.parse(d);
+        const entry = d && d.addons && d.addons[env.pluginID];
+        if (!entry || !Array.isArray(entry.updates) || !entry.updates.length) throw new Error("更新清单格式不对");
+        return { src, list: entry.updates };
+      } catch (e) {
+        errors.push(src.name + "：" + String((e && (e.status ? "HTTP " + e.status : e.message)) || e).slice(0, 80));
+      }
+    }
+    throw new Error("连不上更新服务器（" + errors.join("；") + "）。请检查网络后重试。");
+  }
+  /** { current, latest, available, file, hash, source } — never installs anything. */
+  async function checkForUpdate(sources) {
+    const { src, list } = await fetchUpdateManifest(sources);
+    const latest = latestUpdate(list);
+    const current = env.version || "0";
+    setPref("lastUpdateCheck", String(Date.now()));
+    return {
+      current, latest: latest ? latest.version : current,
+      available: !!latest && cmpVersion(latest.version, current) > 0,
+      file: latest ? String(latest.update_link || "").split("/").pop() : "",
+      hash: latest ? latest.update_hash || "" : "", source: src.name, notes: RELEASE_NOTES_URL,
+    };
+  }
+  /** Downloads the .xpi (GitHub, then jsDelivr), checks its sha256 against update.json and installs it
+   *  over the current version. Zotero restarts the plugin by itself; nothing to uninstall. */
+  async function installUpdate(info, onProgress) {
+    if (!info || !info.available || !info.file) throw new Error("没有可安装的新版本。");
+    const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+    const errors = [];
+    for (const src of UPDATE_SOURCES) {
+      const url = src.base + info.file;
+      try {
+        const install = await AddonManager.getInstallForURL(url, {
+          hash: info.hash || undefined, name: "Verso", version: info.latest,
+          telemetryInfo: { source: "plugin" },
+        });
+        await new Promise((resolve, reject) => {
+          install.addListener({
+            onDownloadProgress: () => { if (onProgress && install.maxProgress > 0) onProgress(src.name, install.progress / install.maxProgress); },
+            // AddonManager.ERROR_INCORRECT_HASH = -2, ERROR_CORRUPT_FILE = -3
+            onDownloadFailed: () => reject(new Error(install.error === -2 ? "文件校验不通过（与 update.json 记录的 sha256 不一致），已拒绝安装"
+              : install.error === -3 ? "下载的文件已损坏" : "下载失败（网络连接问题）")),
+            onInstallFailed: () => reject(new Error("安装失败（文件校验未通过或被拒绝）")),
+            onDownloadCancelled: () => reject(new Error("下载被取消")),
+            onInstallCancelled: () => reject(new Error("安装被取消")),
+            onInstallEnded: () => resolve(),
+          });
+          install.install();
+        });
+        return { version: info.latest, source: src.name };
+      } catch (e) { errors.push(src.name + "：" + ((e && e.message) || e)); }
+    }
+    throw new Error("更新失败（" + errors.join("；") + "）。也可以到 GitHub 下载 " + info.file + " 手动安装，直接覆盖即可，不用卸载。");
+  }
+  // Background check: once a day, 20 s after Zotero starts; only tells the user, never installs by itself.
+  let updateTimer = null;
+  function startUpdateTimer(openSettings) {
+    stopUpdateTimer();
+    updateTimer = env.setTimeout(async () => {
+      updateTimer = null;
+      try {
+        if (pref("autoCheckUpdate") === false) return;
+        if (Date.now() - (Number(pref("lastUpdateCheck")) || 0) < 20 * 3600 * 1000) return;
+        const info = await checkForUpdate();
+        if (!info.available || pref("skipUpdateVersion") === info.latest) return;
+        const pw = new Zotero.ProgressWindow({ closeOnClick: true });
+        pw.changeHeadline("Verso 有新版本 " + info.latest);
+        pw.addDescription("当前 " + info.current + "。点这里打开设置，按「检查更新」即可一键更新，不用卸载重装。");
+        pw.show();
+        try {
+          const box = pw.progressWindow && pw.progressWindow.document;
+          if (box && openSettings) box.addEventListener("click", () => { try { openSettings(); } catch (e) {} }, { once: true });
+        } catch (e) {}
+        pw.startCloseTimer(15000);
+      } catch (e) { LOG("background update check failed", e); }
+    }, 20000);
+  }
+  function stopUpdateTimer() { if (updateTimer) { try { env.clearTimeout(updateTimer); } catch (e) {} updateTimer = null; } }
+
   /** Status of everything, for the settings page. */
   async function checkEnvironment() {
     const lines = [];
@@ -2191,6 +2305,7 @@ function createCLITrans(env) {
     ensureTokens, registerEndpoints, unregisterEndpoints, buildPopup, buildToolbar, attachAllReaders,
     detachAllReaders, translate, translateDocument, relayoutDocument, saveToNote, selfTest, describeSetup,
     setupEnvironment, checkEnvironment, findPython, IS_WIN,
+    checkForUpdate, installUpdate, startUpdateTimer, stopUpdateTimer, version: env.version,
     resolveTool, ENGINES, LAYOUTS, engineLabel, docLayout, listCodexModels,
     // exported for tests
     _t: {
@@ -2198,7 +2313,7 @@ function createCLITrans(env) {
       parseGoogleResponse, chunkText, buildCodexArgs, buildClaudeArgs, buildGeminiArgs, parseGeminiResponse,
       splitMessages, pickEngineFromModel, handleChatRequest, handleTranslateRequest, handleMcpRequest,
       parseBatchResult, batchSystemPrompt, parseVisionResult, visionPrompt, translateSegment, runBatch, mcpDispatch, pdf2zhArgs,
-      noteBlockHTML, runWithFlagFallback, isProxyFailure, friendlyError, headerValue, formatProgress, fmtDuration,
+      noteBlockHTML, runWithFlagFallback, isProxyFailure, friendlyError, cmpVersion, latestUpdate, fetchUpdateManifest, UPDATE_SOURCES, headerValue, formatProgress, fmtDuration,
       normalizePlaceholders, placeholdersIntact, isFormulaDense, isReferenceLike, isFragment, segmentGuard,
       findParagraph, isTranslationTitle, engineFromTitle, docStats, docLayout,
       attached: () => [...attachedWins.keys()].map((w) => { try { return w.location.href.slice(0, 80); } catch (e) { return "?"; } }),

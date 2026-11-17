@@ -17,6 +17,41 @@
     gl.value = Zotero.Prefs.get("clitrans.glossary") || "";
     gl.addEventListener("input", () => Zotero.Prefs.set("clitrans.glossary", gl.value));
 
+    // ---- version & update
+    const ver = document.getElementById("clitrans-ver");
+    const updOut = document.getElementById("clitrans-upd-out");
+    const updBtn = document.getElementById("clitrans-upd-check");
+    const insBtn = document.getElementById("clitrans-upd-install");
+    ver.textContent = "Verso " + (api.version || "");
+    const say = (t) => { updOut.hidden = false; updOut.textContent = t; };
+    let found = null;
+    updBtn.addEventListener("command", async () => {
+      updBtn.disabled = true; insBtn.hidden = true; found = null;
+      say("正在检查更新…");
+      try {
+        const info = await api.checkForUpdate();
+        if (info.available) {
+          found = info;
+          insBtn.hidden = false;
+          say("发现新版本 " + info.latest + "（当前 " + info.current + "，来源：" + info.source + "）。\n点「立即更新」直接覆盖安装，不用卸载。\n更新内容：" + info.notes);
+        } else {
+          say("已是最新版本 " + info.current + "（来源：" + info.source + "）。");
+        }
+      } catch (e) { say("⚠️ " + ((e && e.message) || e)); }
+      finally { updBtn.disabled = false; }
+    });
+    insBtn.addEventListener("command", async () => {
+      if (!found) return;
+      insBtn.disabled = true; updBtn.disabled = true;
+      say("正在下载 " + found.latest + "…");
+      try {
+        const r = await api.installUpdate(found, (src, f) => say("正在从 " + src + " 下载 " + found.latest + "… " + Math.round(f * 100) + "%"));
+        insBtn.hidden = true;
+        say("✓ 已更新到 " + r.version + "（来源：" + r.source + "）。新版本已生效；关闭并重新打开设置页即可看到新的选项。");
+      } catch (e) { say("⚠️ " + ((e && e.message) || e)); insBtn.disabled = false; }
+      finally { updBtn.disabled = false; }
+    });
+
     const showSetup = () => {
       const s = api.describeSetup();
       document.getElementById("clitrans-mcp-cmds").textContent =

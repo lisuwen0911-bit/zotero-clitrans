@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.7.1-D8432E">
+  <img alt="version" src="https://img.shields.io/badge/version-0.7.2-D8432E">
   <img alt="zotero" src="https://img.shields.io/badge/Zotero-7%20%E2%80%93%2010-0F6E6E">
   <img alt="platform" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-supported-1C1B19">
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
@@ -54,10 +54,19 @@
 
 ## 安装
 
-1. 在本仓库文件列表中点开最新的 [`verso-0.7.1.xpi`](verso-0.7.1.xpi)，再点 **Download raw file** 下载。
+1. 在本仓库文件列表中点开最新的 [`verso-0.7.2.xpi`](verso-0.7.2.xpi)，再点 **Download raw file** 下载。
    > 用 Firefox 下载时请右键链接选「另存为」，否则浏览器会尝试把它当作自己的扩展安装。
 2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**（Install Plugin From File…），选中刚下载的 `.xpi`。
-3. 安装完成后无需重启。以后有新版本，Zotero 会自动更新。
+3. 安装完成后无需重启。
+
+### 更新
+
+以后**不需要卸载重装**。打开 **Zotero 设置 → Verso**，最上面「版本与更新」里点 **检查更新**，有新版本就点 **立即更新**，直接覆盖安装，设置、术语表和翻译缓存都会保留。
+
+- 插件每天会在后台检查一次，有新版本时右下角弹出提醒（只提醒，不会自己安装；可在同一处关闭）；
+- GitHub 连不上时，自动改用国内可访问的 jsDelivr 镜像下载；
+- 下载的文件会核对 `update.json` 里记录的 sha256，不一致会拒绝安装；
+- 手动更新也一样：下载新的 `.xpi`，按上面第 2 步再装一次即可覆盖。
 
 装好后，**划词翻译和段落翻译立即可用**；整篇翻译需要先[配置一次运行环境](#整篇翻译的运行环境)。
 
@@ -294,6 +303,11 @@ Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图
 ---
 
 ## 更新日志
+
+**0.7.2**
+- 设置页新增「版本与更新」：一键检查并安装新版本，不用卸载重装；
+- 每天后台检查一次，有新版本时提醒；
+- GitHub 不可达时自动改用 jsDelivr 镜像，安装前校验文件 sha256。
 
 **0.7.1**
 - 一键配置遇到失效的代理（代理软件已关闭但系统代理仍开着）时，自动改为直接连接重试，覆盖 uv 安装、Python 组件安装、字体与版面模型下载；

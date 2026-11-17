@@ -38,6 +38,13 @@ async function startup({ id, version, rootURI }) {
   });
 
   for (const win of Zotero.getMainWindows()) addToWindow(win);
+  try {
+    CLITrans.startUpdateTimer(() => {
+      const win = Zotero.getMainWindow();
+      if (win && win.Zotero_Preferences) return;
+      Zotero.Utilities.Internal.openPreferences(prefPaneID);
+    });
+  } catch (e) { log("update timer failed: " + e); }
   log("started " + version);
 }
 
@@ -123,6 +130,7 @@ function shutdown() {
   try { Zotero.Reader.unregisterEventListener("renderTextSelectionPopup", popupHandler); } catch (e) {}
   try { Zotero.Reader.unregisterEventListener("renderToolbar", toolbarHandler); } catch (e) {}
   try { CLITrans && CLITrans.detachAllReaders(); } catch (e) {}
+  try { CLITrans && CLITrans.stopUpdateTimer(); } catch (e) {}
   try { CLITrans && CLITrans.unregisterEndpoints(); } catch (e) {}
   try { if (prefPaneID) Zotero.PreferencePanes.unregister(prefPaneID); } catch (e) {}
   for (const win of Zotero.getMainWindows()) removeFromWindow(win);

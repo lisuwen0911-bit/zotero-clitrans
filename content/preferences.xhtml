@@ -10,6 +10,18 @@
   </html:style>
 
   <groupbox>
+    <label><html:h2>版本与更新</html:h2></label>
+    <html:div class="row">
+      <html:span id="clitrans-ver" style="font-weight:600">Verso</html:span>
+      <button id="clitrans-upd-check" label="检查更新"/>
+      <button id="clitrans-upd-install" label="立即更新" hidden="true"/>
+      <checkbox label="每天自动检查一次（只提醒，不会自动安装）" preference="extensions.zotero.clitrans.autoCheckUpdate"/>
+    </html:div>
+    <html:pre id="clitrans-upd-out" hidden="true"></html:pre>
+    <html:div class="hint" style="margin-left:0">更新会直接覆盖安装，设置、术语表和翻译缓存都会保留，不需要先卸载。GitHub 连不上时自动改用国内可访问的 jsDelivr 镜像。</html:div>
+  </groupbox>
+
+  <groupbox>
     <label><html:h2>快速开始（Windows / macOS 通用）</html:h2></label>
     <html:div class="hint" style="margin-left:0">划词翻译和 Google 免费引擎装好插件就能用。整篇翻译（保留排版的双语 PDF）需要一个本地运行环境：点下面的「一键配置翻译环境」，插件会自动安装 uv、pdf2zh_next（BabelDOC）、公式排版与文字识别组件，并下载中文字体和版面识别模型，只需一次，约 5–15 分钟（视网速）。GPT / Claude / Gemini 引擎用你本机已登录的命令行工具，没有的话「检测环境」会给出安装命令。</html:div>
     <html:div class="row">
