@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.7.2-D8432E">
+  <img alt="version" src="https://img.shields.io/badge/version-0.7.3-D8432E">
   <img alt="zotero" src="https://img.shields.io/badge/Zotero-7%20%E2%80%93%2010-0F6E6E">
   <img alt="platform" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-supported-1C1B19">
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
@@ -54,7 +54,7 @@
 
 ## 安装
 
-1. 在本仓库文件列表中点开最新的 [`verso-0.7.2.xpi`](verso-0.7.2.xpi)，再点 **Download raw file** 下载。
+1. 在本仓库文件列表中点开最新的 [`verso-0.7.3.xpi`](verso-0.7.3.xpi)，再点 **Download raw file** 下载。
    > 用 Firefox 下载时请右键链接选「另存为」，否则浏览器会尝试把它当作自己的扩展安装。
 2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**（Install Plugin From File…），选中刚下载的 `.xpi`。
 3. 安装完成后无需重启。
@@ -255,6 +255,9 @@ Google 的免费接口会对部分网络限流（返回人机验证页）。插�
 - 用命令行引擎（GPT / Claude）时需要等几秒，卡片上会有加载动画；
 - 检查设置里的段落翻译快捷键是否被改过或关闭。
 
+**GPT / Claude 翻译报「Reconnecting… 5/5」「Falling back from WebSockets」或超时？**
+Codex / Claude Code 连不上自己的服务器。常见于代理软件开的是「系统代理」模式：从程序坞或开始菜单打开的 Zotero 没有代理环境变量，而这些命令行工具不读取系统代理。0.7.3 起插件会自动把 Zotero 使用的系统代理交给它们，一般无需处理；报错里会写明插件使用的代理地址。仍失败时请确认代理软件在运行、节点可用，或改用代理软件的 TUN 模式。
+
 **一键配置报「tunnel error」「积极拒绝」「os error 10061」「ProxyError」？**
 这是电脑上设置了代理，但代理软件（Clash、v2rayN、加速器、抓包工具等）没有在运行：开过「系统代理」后把软件关了，Windows 里的代理设置还留着。0.7.1 起插件会自动识别，并改为不经代理直接连接重试，一般无需处理。如果直连也失败：
 - 网络必须走代理才能上网的，先打开代理软件再点「一键配置」；
@@ -303,6 +306,10 @@ Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图
 ---
 
 ## 更新日志
+
+**0.7.3**
+- 修复：代理软件为「系统代理」模式时，GPT / Claude / Gemini 命令行引擎连不上服务器（Reconnecting… 5/5）。插件现在会把 Zotero 使用的系统代理自动交给它们；
+- 引擎因网络失败时，提示里写明使用的代理地址和处理办法。
 
 **0.7.2**
 - 设置页新增「版本与更新」：一键检查并安装新版本，不用卸载重装；
