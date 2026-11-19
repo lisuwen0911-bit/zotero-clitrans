@@ -194,9 +194,9 @@ function createCLITrans(env) {
       const stdin = (system ? system + "\n\n----- INPUT -----\n" : "") + user + "\n";
       const r = await runWithFlagFallback(
         bin, (d) => buildGeminiArgs(d), ["-o"],
-        { stdin, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000 },
+        { stdin, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000, proxy: true },
       );
-      if (r.exitCode !== 0) throw new Error("Gemini CLI 调用失败：" + errText(r));
+      if (r.exitCode !== 0) throw new Error("Gemini CLI 调用失败：" + errText(r) + await netHint(r.stderr + r.stdout + errText(r), "Gemini（Google）"));
       return r.stdout.trim();
     });
   }
@@ -235,11 +235,11 @@ function createCLITrans(env) {
       const args = buildAgyArgs(prompt);
       for (const d of dirs) args.push("--add-dir", d);
       const r = await runProcess(bin, args, {
-        workdir: tmpDir(), timeoutMs: ((Number(pref("cliTimeoutSec")) || 180) + 15) * 1000,
+        workdir: tmpDir(), timeoutMs: ((Number(pref("cliTimeoutSec")) || 180) + 15) * 1000, proxy: true,
       });
       if (promptFile) { try { await IOUtils.remove(promptFile); } catch (e) {} }
       const out = String(r.stdout || "").trim();
-      if (r.exitCode !== 0 || !out) throw new Error("Gemini（agy）调用失败：" + errText(r));
+      if (r.exitCode !== 0 || !out) throw new Error("Gemini（agy）调用失败：" + errText(r) + await netHint(r.stderr + r.stdout + errText(r), "Gemini（Google）"));
       return out;
     });
   }
@@ -375,14 +375,69 @@ function createCLITrans(env) {
     return spec;
   }
 
+  // ---------------------------------------------------------------- proxy for AI command-line tools
+  // Zotero started from the Dock / Start menu has no HTTPS_PROXY, and Codex / Claude Code / agy do not read
+  // the macOS or Windows *system* proxy. Behind Clash & co. (system-proxy mode, not TUN) they then cannot
+  // reach their servers ("Reconnecting… 5/5", "Falling back from WebSockets"). Zotero itself does use the
+  // system proxy, so ask its proxy service which proxy it would take and hand that to the CLI.
+  const PROXY_VARS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
+  let proxyCache = null;
+  /** Pure: environment for a CLI from a Firefox nsIProxyInfo-like {type, host, port}. */
+  function proxyEnvFromInfo(pi) {
+    if (!pi || !pi.host || !(pi.port > 0) || pi.type === "direct") return {};
+    const host = /:/.test(pi.host) && !/^\[/.test(pi.host) ? "[" + pi.host + "]" : pi.host;
+    const scheme = pi.type === "socks" ? "socks5h" : pi.type === "socks4" ? "socks4" : "http";
+    const url = scheme + "://" + host + ":" + pi.port;
+    const e = { NO_PROXY: "localhost,127.0.0.1,::1", no_proxy: "localhost,127.0.0.1,::1" };
+    for (const k of PROXY_VARS) e[k] = url;
+    return e;
+  }
+  async function systemProxyInfo(url) {
+    const pps = Components.classes["@mozilla.org/network/protocol-proxy-service;1"]
+      .getService(Components.interfaces.nsIProtocolProxyService);
+    const ch = env.Services.io.newChannelFromURI(env.Services.io.newURI(url), null,
+      env.Services.scriptSecurityManager.getSystemPrincipal(), null,
+      Components.interfaces.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL, Components.interfaces.nsIContentPolicy.TYPE_OTHER);
+    return new Promise((resolve) => {
+      try { pps.asyncResolve(ch, 0, { onProxyAvailable: (req, c, info) => resolve(info) }); } catch (e) { resolve(null); }
+      env.setTimeout(() => resolve(null), 3000);
+    });
+  }
+  /** Proxy variables for an AI CLI; {} when the user already exported some, or when there is no proxy. */
+  async function aiProxyEnv() {
+    if (pref("cliUseSystemProxy") === false) return {};
+    if (PROXY_VARS.some((k) => envVar(k))) return {}; // the user's own variables win
+    if (proxyCache && Date.now() - proxyCache.at < 60 * 1000) return proxyCache.env;
+    let e = {};
+    try { e = proxyEnvFromInfo(await systemProxyInfo("https://chatgpt.com/")); } catch (err) { LOG("proxy lookup failed", err); }
+    proxyCache = { at: Date.now(), env: e };
+    return e;
+  }
+  /** "127.0.0.1:7897" or "", for messages. */
+  async function proxyLabel() {
+    const e = await aiProxyEnv();
+    if (e.HTTPS_PROXY) return e.HTTPS_PROXY.replace(/^\w+:\/\//, "");
+    const own = PROXY_VARS.map(envVar).find(Boolean);
+    return own ? own.replace(/^\w+:\/\//, "") + "（环境变量）" : "";
+  }
+  /** Adds a plain-language hint when a CLI failed because it could not reach its server. */
+  async function netHint(text, service) {
+    if (!/Reconnecting|Falling back from WebSockets|stream disconnected|error sending request|request timed out|timed out|ECONNRESET|ENOTFOUND|getaddrinfo|Connection refused|Network ?Error|fetch failed|超时被终止/i.test(String(text || ""))) return "";
+    const p = await proxyLabel();
+    return "\n\n看起来 " + service + " 连不上它的服务器。" + (p
+      ? "插件已经让它走代理 " + p + "，请确认代理软件正在运行、节点可用。"
+      : "插件没有检测到代理：如果你需要通过代理 / VPN 访问 " + service + "，请打开代理软件的「系统代理」或 TUN 模式后重试。");
+  }
+
   async function runProcess(command, args, opts = {}) {
     const { Subprocess, setTimeout, clearTimeout } = env;
     const spec = await launchSpec(command);
+    const proxyEnv = opts.proxy ? await aiProxyEnv() : {};
     const proc = await Subprocess.call({
       command: spec.command,
       arguments: spec.prefix.concat(args),
       // UTF-8 everywhere: Windows would otherwise give Python a GBK/cp1252 stdout
-      environment: Object.assign({ PATH: searchPATH(), NO_COLOR: "1", PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, opts.env || {}),
+      environment: Object.assign({ PATH: searchPATH(), NO_COLOR: "1", PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, proxyEnv, opts.env || {}),
       environmentAppend: true,
       workdir: opts.workdir || undefined,
       stderr: "pipe",
@@ -484,13 +539,13 @@ function createCLITrans(env) {
         r = await runWithFlagFallback(
           codex, (d) => buildCodexArgs(outFile, work, d, insFile, null, images),
           ["--ephemeral", "--color", "--ignore-user-config"],
-          { stdin: user, workdir: work, timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000 },
+          { stdin: user, workdir: work, timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000, proxy: true },
         );
       } finally { try { await IOUtils.remove(insFile); } catch (e) {} }
       let text = "";
       try { text = await Zotero.File.getContentsAsync(outFile); } catch (e) {}
       try { await IOUtils.remove(outFile); } catch (e) {}
-      if (r.exitCode !== 0 && !text.trim()) throw new Error("Codex 调用失败：" + errText(r));
+      if (r.exitCode !== 0 && !text.trim()) throw new Error("Codex 调用失败：" + errText(r) + await netHint(r.stderr + r.stdout + errText(r), "Codex（OpenAI）"));
       return String(text || r.stdout).trim();
     });
   }
@@ -498,7 +553,7 @@ function createCLITrans(env) {
   async function listCodexModels() {
     const codex = resolveTool("codex");
     if (!codex) throw new Error("找不到 Codex CLI");
-    const r = await runProcess(codex, ["debug", "models"], { workdir: tmpDir(), timeoutMs: 60000 });
+    const r = await runProcess(codex, ["debug", "models"], { workdir: tmpDir(), timeoutMs: 60000, proxy: true });
     const d = JSON.parse(r.stdout);
     return (d.models || []).filter((m) => m.visibility !== "hide")
       .map((m) => ({ id: m.slug, name: m.display_name || m.slug, description: m.description || "" }));
@@ -524,9 +579,9 @@ function createCLITrans(env) {
       const r = await runWithFlagFallback(
         claude, (d) => buildClaudeArgs(system, d),
         ["--tools", "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "--disable-slash-commands"],
-        { stdin: user, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000 },
+        { stdin: user, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000, proxy: true },
       );
-      if (r.exitCode !== 0) throw new Error("Claude Code 调用失败：" + errText(r));
+      if (r.exitCode !== 0) throw new Error("Claude Code 调用失败：" + errText(r) + await netHint(r.stderr + r.stdout + errText(r), "Claude Code（Anthropic）"));
       return r.stdout.trim();
     });
   }
@@ -546,7 +601,7 @@ function createCLITrans(env) {
           return a;
         },
         ["--tools", "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "--disable-slash-commands"],
-        { stdin, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000 },
+        { stdin, workdir: tmpDir(), timeoutMs: (Number(pref("cliTimeoutSec")) || 180) * 1000, proxy: true },
       );
       let res = null;
       for (const line of String(r.stdout || "").split("\n")) {
@@ -2313,7 +2368,7 @@ function createCLITrans(env) {
       parseGoogleResponse, chunkText, buildCodexArgs, buildClaudeArgs, buildGeminiArgs, parseGeminiResponse,
       splitMessages, pickEngineFromModel, handleChatRequest, handleTranslateRequest, handleMcpRequest,
       parseBatchResult, batchSystemPrompt, parseVisionResult, visionPrompt, translateSegment, runBatch, mcpDispatch, pdf2zhArgs,
-      noteBlockHTML, runWithFlagFallback, isProxyFailure, friendlyError, cmpVersion, latestUpdate, fetchUpdateManifest, UPDATE_SOURCES, headerValue, formatProgress, fmtDuration,
+      noteBlockHTML, runWithFlagFallback, proxyEnvFromInfo, aiProxyEnv, netHint, isProxyFailure, friendlyError, cmpVersion, latestUpdate, fetchUpdateManifest, UPDATE_SOURCES, headerValue, formatProgress, fmtDuration,
       normalizePlaceholders, placeholdersIntact, isFormulaDense, isReferenceLike, isFragment, segmentGuard,
       findParagraph, isTranslationTitle, engineFromTitle, docStats, docLayout,
       attached: () => [...attachedWins.keys()].map((w) => { try { return w.location.href.slice(0, 80); } catch (e) { return "?"; } }),

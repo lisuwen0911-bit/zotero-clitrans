@@ -34,3 +34,4 @@ pref("extensions.zotero.clitrans.pythonPath", "");
 pref("extensions.zotero.clitrans.autoCheckUpdate", true);
 pref("extensions.zotero.clitrans.lastUpdateCheck", "0");
 pref("extensions.zotero.clitrans.skipUpdateVersion", "");
+pref("extensions.zotero.clitrans.cliUseSystemProxy", true);
