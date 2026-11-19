@@ -422,6 +422,13 @@ function createCLITrans(env) {
   }
   /** Adds a plain-language hint when a CLI failed because it could not reach its server. */
   async function netHint(text, service) {
+    text = String(text || "");
+    // login / region problems are not network problems: say so instead of blaming the proxy
+    if (/authentication required|not logged in|please log ?in|run '?\w+'? to log ?in|login required|unauthori[sz]ed|\b401\b|invalid api key|OAuth/i.test(text))
+      return "\n\n" + service + " 需要重新登录：在终端运行一次它的命令行工具（codex login / claude / agy）完成登录后重试。";
+    if (/unsupported (country|region|location)|location is not supported|User location|not available in your (country|region)|不受支持的(国家|地区)|region.{0,20}not supported|\b403\b.{0,80}(region|country)/i.test(text))
+      return "\n\n" + service + " 拒绝了当前地区的请求：请把代理节点换到它支持的地区（例如新加坡、日本、美国；Claude 不支持香港）。" +
+        (/Gemini/.test(service) ? "如果换了节点仍然不行，可能是你的 Google 账号所在地区不支持 Antigravity：可以在设置里改填 Gemini API Key。" : "");
     if (!/Reconnecting|Falling back from WebSockets|stream disconnected|error sending request|request timed out|timed out|ECONNRESET|ENOTFOUND|getaddrinfo|Connection refused|Network ?Error|fetch failed|超时被终止/i.test(String(text || ""))) return "";
     const p = await proxyLabel();
     return "\n\n看起来 " + service + " 连不上它的服务器。" + (p

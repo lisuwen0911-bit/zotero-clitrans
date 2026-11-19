@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.7.3-D8432E">
+  <img alt="version" src="https://img.shields.io/badge/version-0.7.4-D8432E">
   <img alt="zotero" src="https://img.shields.io/badge/Zotero-7%20%E2%80%93%2010-0F6E6E">
   <img alt="platform" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-supported-1C1B19">
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
@@ -54,7 +54,7 @@
 
 ## 安装
 
-1. 在本仓库文件列表中点开最新的 [`verso-0.7.3.xpi`](verso-0.7.3.xpi)，再点 **Download raw file** 下载。
+1. 在本仓库文件列表中点开最新的 [`verso-0.7.4.xpi`](verso-0.7.4.xpi)，再点 **Download raw file** 下载。
    > 用 Firefox 下载时请右键链接选「另存为」，否则浏览器会尝试把它当作自己的扩展安装。
 2. 打开 Zotero → **工具 → 插件**（Tools → Plugins）→ 右上角齿轮 → **从文件安装插件…**（Install Plugin From File…），选中刚下载的 `.xpi`。
 3. 安装完成后无需重启。
@@ -67,6 +67,8 @@
 - GitHub 连不上时，自动改用国内可访问的 jsDelivr 镜像下载；
 - 下载的文件会核对 `update.json` 里记录的 sha256，不一致会拒绝安装；
 - 手动更新也一样：下载新的 `.xpi`，按上面第 2 步再装一次即可覆盖。
+
+> **使用 VPN / 代理的话，请在代理软件里打开 TUN 模式**（也叫「虚拟网卡」「增强模式」）。只开「系统代理」时，GPT、Claude、Gemini 等命令行引擎可能连不上服务器。
 
 装好后，**划词翻译和段落翻译立即可用**；整篇翻译需要先[配置一次运行环境](#整篇翻译的运行环境)。
 
@@ -306,6 +308,10 @@ Verso 就是原来的「智译 CLI Translate」，0.7.0 起更名并更换了图
 ---
 
 ## 更新日志
+
+**0.7.4**
+- 设置页「检查更新」旁注明：使用 VPN 时请打开 TUN 模式；
+- 引擎报错更准确：需要重新登录（如 agy 未登录）、地区不受支持（如 Gemini「User location is not supported」、Claude 不支持香港节点）时给出对应办法，不再误报为网络问题。
 
 **0.7.3**
 - 修复：代理软件为「系统代理」模式时，GPT / Claude / Gemini 命令行引擎连不上服务器（Reconnecting… 5/5）。插件现在会把 Zotero 使用的系统代理自动交给它们；

@@ -111,6 +111,16 @@
               "strict_min_version": "6.999"
             }
           }
+        },
+        {
+          "version": "0.7.4",
+          "update_link": "https://raw.githubusercontent.com/zhouhuai09110v0/zotero-verso/main/verso-0.7.4.xpi",
+          "update_hash": "sha256:963d6a51b009029fc7bebde14f87ea0c406965ec8d0439548c8604f13da9c9a3",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999"
+            }
+          }
         }
       ]
     }
